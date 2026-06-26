@@ -2,7 +2,7 @@ import {
   createUiTextCopy,
   extendForum,
   getUiCopy
-} from '@bias/forum'
+} from '@bias/core/forum'
 import { ResourceNormalizer } from '@bias/core'
 import { normalizePost } from '@bias/posts'
 import PostComposer from './PostComposer.vue'

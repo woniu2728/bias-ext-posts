@@ -1,4 +1,4 @@
-import { extendAdmin } from '@bias/admin'
+import { extendAdmin } from '@bias/core/admin'
 
 export const extend = [
   extendAdmin(admin => admin.dashboardStat({

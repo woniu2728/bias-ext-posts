@@ -172,7 +172,7 @@ import {
   useComposerRuntime,
   useComposerStore,
   useForumStore
-} from '@bias/forum'
+} from '@bias/core/forum'
 import { normalizePost } from '@bias/posts'
 import { useForumRealtimeStore } from '@bias/realtime'
 
