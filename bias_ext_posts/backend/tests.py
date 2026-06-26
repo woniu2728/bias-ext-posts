@@ -22,9 +22,9 @@ from bias_core.extensions.runtime import (
 )
 from bias_core.models import AuditLog
 from bias_core.extensions import ResourceEndpointDefinition
-from extensions.testing import ResourceRegistry
+from bias_core.testing import ResourceRegistry
 from bias_core.search_index_service import get_search_index_definitions
-from extensions.testing import ExtensionRuntimeTestMixin, bootstrap_enabled_extension_application
+from bias_core.testing import ExtensionRuntimeTestMixin, bootstrap_enabled_extension_application
 from bias_ext_posts.backend.resources import resolve_post_event_data
 from bias_ext_discussions.backend.visibility import (
     build_post_visibility_q,
@@ -269,7 +269,7 @@ class PostPaginationTests(TestCase):
                 raise OperationalError("database is locked")
             return original_create(*args, **kwargs)
 
-        with patch("apps.core.db.time.sleep", return_value=None):
+        with patch("bias_core.db.time.sleep", return_value=None):
             with patch("bias_ext_posts.backend.services.Post.objects.create", side_effect=flaky_create):
                 post = PostService.create_post(
                     discussion_id=discussion.id,
@@ -291,7 +291,7 @@ class PostPaginationTests(TestCase):
             def is_private(self, model, instance, *, default=False):
                 return model is Post and getattr(instance, "number", 0) > 1
 
-        with patch("apps.core.extensions.runtime_models.get_runtime_model_service", return_value=RuntimeModelService()):
+        with patch("bias_core.extensions.runtime_models.get_runtime_model_service", return_value=RuntimeModelService()):
             reply = PostService.create_post(
                 discussion_id=discussion.id,
                 content="Private reply",
@@ -327,7 +327,7 @@ class PostPaginationTests(TestCase):
             def is_private(self, model, instance, *, default=False):
                 return model is Post and instance.id == reply.id
 
-        with patch("apps.core.extensions.runtime_models.get_runtime_model_service", return_value=RuntimeModelService()):
+        with patch("bias_core.extensions.runtime_models.get_runtime_model_service", return_value=RuntimeModelService()):
             approved = PostService.approve_post(reply, admin)
 
         self.assertTrue(approved.is_private)
@@ -386,7 +386,7 @@ class PostPaginationTests(TestCase):
             ),
         )
 
-        with patch("apps.core.extensions.runtime_models.get_runtime_model_service", return_value=app.models):
+        with patch("bias_core.extensions.runtime_models.get_runtime_model_service", return_value=app.models):
             visible_ids = set(
                 PostService.apply_visibility_filters(
                     Post.objects.filter(id__in=[allowed.id, denied.id]),
@@ -456,7 +456,7 @@ class PostPaginationTests(TestCase):
             ),
         )
 
-        with patch("apps.core.extensions.runtime_models.get_runtime_model_service", return_value=app.models):
+        with patch("bias_core.extensions.runtime_models.get_runtime_model_service", return_value=app.models):
             visible_ids = set(
                 PostService.apply_visibility_filters(
                     Post.objects.filter(id__in=[allowed.id, denied.id]),
@@ -540,7 +540,7 @@ class PostPaginationTests(TestCase):
         )
 
         mocked_bus = Mock()
-        with patch("apps.core.domain_events.get_forum_event_bus", return_value=mocked_bus):
+        with patch("bias_core.domain_events.get_forum_event_bus", return_value=mocked_bus):
             with self.captureOnCommitCallbacks(execute=True) as callbacks:
                 post = PostService.create_post(
                     discussion_id=discussion.id,
@@ -678,7 +678,7 @@ class PostApiTests(TestCase):
         )
 
         with patch("bias_ext_posts.backend.handlers.get_runtime_resource_registry", return_value=registry):
-            with patch("apps.core.resource_dispatcher.get_runtime_resource_registry", return_value=registry):
+            with patch("bias_core.resource_dispatcher.get_runtime_resource_registry", return_value=registry):
                 response = self.client.get(f"/api/posts/{self.post.id}")
 
         self.assertEqual(response.status_code, 200, response.content)
@@ -1094,6 +1094,8 @@ class PostApiTests(TestCase):
         self.assertEqual(audit_log.user_id, moderator.id)
         self.assertEqual(audit_log.target_type, "post")
         self.assertEqual(audit_log.data["discussion_id"], self.discussion.id)
+
+
 
 
 
