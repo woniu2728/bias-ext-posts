@@ -30,5 +30,8 @@
   "extra": {
     "auto_install": true,
     "auto_enable": true
+  },
+  "security": {
+    "capabilities_notice": "Post domain extension; owns post records, composer runtime, and post lifecycle/moderation behavior."
   }
 }
