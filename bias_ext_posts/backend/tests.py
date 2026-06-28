@@ -208,6 +208,34 @@ class PostsExtensionDiagnosticsTests(ExtensionRuntimeTestMixin, TestCase):
         self.assertIn("post.edit", permission_codes)
         self.assertIn("post.delete", permission_codes)
 
+    def test_posts_extension_registers_post_resource_base_serializer(self):
+        application = self.bootstrap_extensions("posts")
+        registry = application.resources
+
+        self.assertIsNotNone(registry.get_resource("post"))
+        author = User.objects.create_user(
+            username="post-resource-author",
+            email="post-resource-author@example.com",
+            password="password123",
+            is_email_confirmed=True,
+        )
+        trusted_group = Group.objects.create(name="PostResourceAuthor", color="#4d698e")
+        Permission.objects.create(group=trusted_group, permission="startDiscussion")
+        author.user_groups.add(trusted_group)
+        discussion = create_runtime_discussion(
+            title="Post resource discussion",
+            content="Post resource content",
+            user=author,
+        )
+        post = Post.objects.get(id=discussion.first_post_id)
+
+        payload = registry.serialize("post", post, {"user": author})
+
+        self.assertEqual(payload["id"], post.id)
+        self.assertEqual(payload["discussion_id"], discussion.id)
+        self.assertEqual(payload["number"], 1)
+        self.assertEqual(payload["content"], "Post resource content")
+
     def test_inspect_reports_posts_model_as_extension_owned(self):
         stdout = StringIO()
         call_command(

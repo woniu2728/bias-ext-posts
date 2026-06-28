@@ -6,6 +6,12 @@ from bias_core.extensions import ResourceDefinition, ResourceFieldDefinition
 def post_resource_definitions():
     return (
         ResourceDefinition(
+            resource="post",
+            module_id="posts",
+            resolver=serialize_post_base,
+            description="帖子基础资源。",
+        ),
+        ResourceDefinition(
             resource="search_post",
             module_id="posts",
             resolver=serialize_search_post_base,
@@ -63,6 +69,25 @@ def resolve_admin_total_posts(stats, context: dict) -> int:
     from bias_ext_posts.backend.models import Post
 
     return Post.objects.count()
+
+
+def serialize_post_base(post, context: dict) -> dict:
+    from bias_ext_posts.backend.services import PostService
+
+    return {
+        "id": post.id,
+        "discussion_id": post.discussion_id,
+        "number": post.number,
+        "type": post.type,
+        "content": post.content,
+        "content_html": PostService.resolve_content_html(post),
+        "created_at": post.created_at,
+        "updated_at": post.updated_at,
+        "edited_at": post.edited_at,
+        "is_hidden": post.is_hidden,
+        "approval_status": post.approval_status,
+        "approval_note": post.approval_note,
+    }
 
 
 def serialize_search_post_base(post, context: dict) -> dict:
