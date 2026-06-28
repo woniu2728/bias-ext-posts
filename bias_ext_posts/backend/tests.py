@@ -26,11 +26,14 @@ from bias_core.extensions.testing import (
     ExtensionApplication,
     ExtensionRuntimeTestMixin,
     ResourceRegistry,
+    Setting,
+    save_extension_settings,
     bootstrap_enabled_extension_application,
     capture_runtime_events,
     get_forum_registry,
     get_search_index_definitions,
 )
+from bias_core.extension_settings_service import clear_extension_settings_cache
 from bias_core.extensions.bootstrap import (
     get_extension_host,
 )
@@ -102,6 +105,7 @@ class PostsExtensionDiagnosticsTests(ExtensionRuntimeTestMixin, TestCase):
         service = application.get_service("posts.service")
         discussion_posts = application.get_service("discussion.posts")
         realtime_post_payload = application.get_service("realtime.post_payload")
+        runtime_view = application.get_runtime_extension("posts")
 
         self.assertIn("posts.service", application.get_service_provider_keys(extension_id="posts"))
         self.assertIn("discussion.posts", application.get_service_provider_keys(extension_id="posts"))
@@ -130,6 +134,9 @@ class PostsExtensionDiagnosticsTests(ExtensionRuntimeTestMixin, TestCase):
             )
         )
         self.assertIs(service["model"], Post)
+        setting_keys = {definition.key for definition in runtime_view.settings_schema}
+        self.assertIn("allow_hide_own_posts", setting_keys)
+        self.assertIn("allow_hide_own_posts", runtime_view.forum_settings_keys)
         self.assertEqual(service["approval_approved"], Post.APPROVAL_APPROVED)
         self.assertEqual(service["approval_pending"], Post.APPROVAL_PENDING)
         self.assertEqual(service["approval_rejected"], Post.APPROVAL_REJECTED)
@@ -765,6 +772,8 @@ class PostPaginationTests(ExtensionRuntimeTestMixin, TestCase):
 
 class PostApiTests(TestCase):
     def setUp(self):
+        Setting.objects.filter(key="extensions.posts.allow_hide_own_posts").delete()
+        clear_extension_settings_cache("posts")
         self.author = User.objects.create_user(
             username="author",
             email="author@example.com",
@@ -1276,6 +1285,85 @@ class PostApiTests(TestCase):
 
         self.assertEqual(restore_response.status_code, 200, restore_response.content)
         self.assertFalse(restore_response.json()["is_hidden"])
+
+    def test_author_can_hide_own_last_post_when_setting_allows_until_reply(self):
+        response = self.client.post(
+            f"/api/posts/{self.post.id}/hide",
+            **self.auth_header_for(self.author),
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertTrue(response.json()["is_hidden"])
+        self.post.refresh_from_db()
+        self.assertEqual(self.post.hidden_user_id, self.author.id)
+
+        restore_response = self.client.post(
+            f"/api/posts/{self.post.id}/hide",
+            **self.auth_header_for(self.author),
+        )
+
+        self.assertEqual(restore_response.status_code, 200, restore_response.content)
+        self.assertFalse(restore_response.json()["is_hidden"])
+
+    def test_author_cannot_hide_own_post_after_later_reply_when_setting_is_reply(self):
+        PostService.create_post(
+            discussion_id=self.discussion.id,
+            content="Later reply blocks previous author hide",
+            user=self.reporter,
+        )
+
+        response = self.client.post(
+            f"/api/posts/{self.post.id}/hide",
+            **self.auth_header_for(self.author),
+        )
+
+        self.assertEqual(response.status_code, 403, response.content)
+
+    def test_author_hide_own_post_respects_never_and_indefinite_settings(self):
+        save_extension_settings("posts", {"allow_hide_own_posts": "0"})
+
+        denied_response = self.client.post(
+            f"/api/posts/{self.post.id}/hide",
+            **self.auth_header_for(self.author),
+        )
+
+        self.assertEqual(denied_response.status_code, 403, denied_response.content)
+
+        save_extension_settings("posts", {"allow_hide_own_posts": "-1"})
+        PostService.create_post(
+            discussion_id=self.discussion.id,
+            content="Later reply does not block indefinite own hide",
+            user=self.reporter,
+        )
+
+        allowed_response = self.client.post(
+            f"/api/posts/{self.post.id}/hide",
+            **self.auth_header_for(self.author),
+        )
+
+        self.assertEqual(allowed_response.status_code, 200, allowed_response.content)
+        self.assertTrue(allowed_response.json()["is_hidden"])
+
+    def test_author_hide_own_post_respects_minute_window(self):
+        save_extension_settings("posts", {"allow_hide_own_posts": "10"})
+
+        recent_response = self.client.post(
+            f"/api/posts/{self.post.id}/hide",
+            **self.auth_header_for(self.author),
+        )
+
+        self.assertEqual(recent_response.status_code, 200, recent_response.content)
+
+        PostService.set_hidden_state(self.post, self.author, False)
+        self.post.created_at = timezone.now() - timedelta(minutes=11)
+        self.post.save(update_fields=["created_at"])
+
+        expired_response = self.client.post(
+            f"/api/posts/{self.post.id}/hide",
+            **self.auth_header_for(self.author),
+        )
+
+        self.assertEqual(expired_response.status_code, 403, expired_response.content)
 
     def test_hiding_post_writes_admin_audit_log(self):
         response = self.client.post(

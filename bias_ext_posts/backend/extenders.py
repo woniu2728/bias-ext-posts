@@ -11,6 +11,7 @@ from bias_core.extensions import (
     RealtimeExtender,
     SearchIndexExtender,
     ServiceProviderExtender,
+    SettingsExtender,
 )
 
 from bias_ext_posts.backend.admin_surface import permission_definitions
@@ -33,6 +34,7 @@ from bias_ext_posts.backend.runtime import (
 )
 from bias_ext_posts.backend.search_contracts import search_index_definitions
 from bias_ext_posts.backend.search_targets import post_search_target_provider
+from bias_ext_posts.backend.settings import setting_field_definitions
 from bias_ext_posts.backend.visibility import scope_post_view
 
 
@@ -75,6 +77,10 @@ def admin_extenders():
     return (
         AdminSurfaceExtender(
             permissions=permission_definitions(),
+        ),
+        SettingsExtender(
+            fields=setting_field_definitions(),
+            expose_to_forum=("allow_hide_own_posts",),
         ),
     )
 

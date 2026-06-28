@@ -5,7 +5,9 @@ from typing import Any, List, Optional, Tuple
 
 from django.db import IntegrityError
 
-from bias_core.extensions.platform import sqlite_write_retry
+from django.utils import timezone
+
+from bias_core.extensions.platform import get_extension_settings, sqlite_write_retry
 from bias_core.extensions.platform import get_forum_event_bus
 from bias_core.extensions.platform import evaluate_extension_policy
 from bias_core.extensions.runtime import (
@@ -384,17 +386,53 @@ class PostService:
             return False
         if user.is_suspended:
             return False
-        allowed = (
+        allowed = False
+        if (
             has_runtime_forum_permission(user, "post.hide")
             or has_runtime_forum_permission(user, "discussion.hidePosts")
             or has_runtime_forum_permission(user, "discussion.hide")
-        )
+        ):
+            allowed = True
+        elif post.user_id == user.id:
+            allowed = PostService._author_can_hide_post(post, user)
         return bool(evaluate_extension_policy(
             "post.hide",
             default=allowed,
             user=user,
             post=post,
         ))
+
+    @staticmethod
+    def _author_can_hide_post(post: Post, user: Any) -> bool:
+        hidden_user_id = getattr(post, "hidden_user_id", None)
+        if getattr(post, "hidden_at", None) is not None and hidden_user_id != getattr(user, "id", None):
+            return False
+        discussion = getattr(post, "discussion", None)
+        if discussion is None:
+            return False
+        if not validate_runtime_replyable_discussion(
+            post.discussion_id,
+            user,
+            discussion=discussion,
+        ):
+            return False
+        allow_hiding = str(
+            get_extension_settings("posts").get("allow_hide_own_posts", "reply") or "reply"
+        ).strip()
+        if allow_hiding == "-1":
+            return True
+        if allow_hiding == "reply":
+            return getattr(post, "number", 0) >= getattr(discussion, "last_post_number", 0)
+        try:
+            allowed_minutes = int(allow_hiding)
+        except (TypeError, ValueError):
+            return False
+        if allowed_minutes <= 0:
+            return False
+        created_at = getattr(post, "created_at", None)
+        if created_at is None:
+            return False
+        return timezone.now() - created_at < timezone.timedelta(minutes=allowed_minutes)
 
     @staticmethod
     def _render_markdown(content: str) -> str:
