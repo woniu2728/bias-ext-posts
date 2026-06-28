@@ -92,7 +92,7 @@ def resolve_post_can_delete(post, context: dict) -> bool:
 
 
 def resolve_post_type_definition(post, context: dict) -> dict | None:
-    from bias_core.extensions.forum import get_forum_registry
+    from bias_core.extensions.platform import get_forum_registry
 
     definition = get_forum_registry().get_post_type(getattr(post, "type", ""))
     if not definition:

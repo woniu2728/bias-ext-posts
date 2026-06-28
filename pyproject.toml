@@ -4,8 +4,10 @@ version = "0.1.0"
 description = "Bias Posts Extension"
 requires-python = ">=3.11"
 dependencies = ["bias-core>=0.1,<0.2"]
+
 [project.entry-points."bias.extensions"]
 posts = "bias_ext_posts.backend.ext:extend"
+
 [tool.setuptools]
 include-package-data = true
 
@@ -16,5 +18,11 @@ include = ["bias_ext_posts*"]
 [tool.setuptools.data-files]
 "bias_extensions/posts" = ["extension.json"]
 "bias_extensions/posts/frontend/admin" = ["frontend/admin/index.js"]
-"bias_extensions/posts/frontend/forum" = ["frontend/forum/index.js", "frontend/forum/PostComposer.vue", "frontend/forum/postFrontendRegistry.js", "frontend/forum/postRuntime.js", "frontend/forum/sdk.d.ts", "frontend/forum/sdk.js"]
-
+"bias_extensions/posts/frontend/forum" = [
+  "frontend/forum/PostComposer.vue",
+  "frontend/forum/index.js",
+  "frontend/forum/postFrontendRegistry.js",
+  "frontend/forum/postRuntime.js",
+  "frontend/forum/sdk.d.ts",
+  "frontend/forum/sdk.js",
+]

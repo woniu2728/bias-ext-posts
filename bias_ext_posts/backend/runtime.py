@@ -26,6 +26,8 @@ def post_service_provider() -> dict:
         "can_view": post_query_service.can_view_post,
         "apply_visibility": post_query_service.apply_visibility_filters,
         "build_visible_queryset": post_query_service.build_visible_post_queryset,
+        "get_visible_ids": _get_visible_post_ids,
+        "get_action_context": _get_post_action_context,
         "get_window": post_query_service.get_post_window,
         "get_page_for_near_post": post_query_service.get_page_for_near_post,
         "get_by_id": PostService.get_post_by_id,
@@ -35,12 +37,173 @@ def post_service_provider() -> dict:
         "set_hidden_state": PostService.set_hidden_state,
         "approve": PostService.approve_post,
         "reject": PostService.reject_post,
+        "list_approval_queue": _list_approval_queue,
+        "count_pending_approvals": _count_pending_approvals,
+        "process_approval": _process_approval,
+        "event_types": post_event_type_aliases(),
         "can_edit": PostService.can_edit_post,
         "can_delete": PostService.can_delete_post,
         "create_event_post": _create_event_post,
+        "resolve_content_html": PostService.resolve_content_html,
+        "serialize": _serialize_post,
+        "serialize_by_id": _serialize_post_by_id,
+        "reply_notification_context": _reply_notification_context,
+        "notification_context": _notification_context,
+        "get_number": _get_post_number,
+    }
+
+
+def post_event_type_aliases() -> dict[str, type]:
+    from bias_ext_posts.backend.events import (
+        PostApprovedEvent,
+        PostCreatedEvent,
+        PostDeletedEvent,
+        PostHiddenEvent,
+        PostRejectedEvent,
+        PostResubmittedEvent,
+    )
+
+    return {
+        "posts.post.created": PostCreatedEvent,
+        "posts.post.approved": PostApprovedEvent,
+        "posts.post.rejected": PostRejectedEvent,
+        "posts.post.resubmitted": PostResubmittedEvent,
+        "posts.post.hidden": PostHiddenEvent,
+        "posts.post.deleted": PostDeletedEvent,
+    }
+
+
+post_service_provider.event_types = post_event_type_aliases
+
+
+def _list_approval_queue() -> list[dict]:
+    from bias_core.extensions.runtime import list_runtime_pending_discussion_first_post_ids
+    from bias_ext_posts.backend.models import Post
+
+    discussion_first_post_ids = list_runtime_pending_discussion_first_post_ids()
+    posts = Post.objects.filter(
+        approval_status=Post.APPROVAL_PENDING,
+    ).exclude(
+        id__in=discussion_first_post_ids,
+    ).select_related("user", "discussion").order_by("-created_at")
+    return [_serialize_approval_item(post) for post in posts]
+
+
+def _count_pending_approvals() -> int:
+    from bias_core.extensions.runtime import list_runtime_pending_discussion_first_post_ids
+    from bias_ext_posts.backend.models import Post
+
+    discussion_first_post_ids = list_runtime_pending_discussion_first_post_ids()
+    return Post.objects.filter(approval_status=Post.APPROVAL_PENDING).exclude(
+        id__in=discussion_first_post_ids,
+    ).count()
+
+
+def _process_approval(*, content_id: int, action: str, actor, note: str = "") -> dict:
+    from django.core.exceptions import ValidationError
+    from django.shortcuts import get_object_or_404
+    from bias_ext_posts.backend.models import Post
+    from bias_ext_posts.backend.services import PostService
+
+    post = get_object_or_404(
+        Post.objects.select_related("discussion", "user"),
+        id=content_id,
+        approval_status=Post.APPROVAL_PENDING,
+    )
+    if action == "approve":
+        processed = PostService.approve_post(post, actor, note=note)
+    elif action == "reject":
+        processed = PostService.reject_post(post, actor, note=note)
+    else:
+        raise ValidationError("无效的审核动作")
+    return _serialize_approval_item(processed)
+
+
+def _serialize_approval_item(post) -> dict:
+    return {
+        "type": "post",
+        "id": post.id,
+        "title": post.discussion.title if post.discussion else "回复审核",
+        "content": post.content,
+        "created_at": post.created_at,
+        "approval_status": post.approval_status,
+        "approval_note": post.approval_note,
+        "author": _serialize_user(getattr(post, "user", None)),
+        "discussion": {
+            "id": post.discussion.id,
+            "title": post.discussion.title,
+        } if post.discussion else None,
+        "post": {
+            "id": post.id,
+            "number": post.number,
+        },
+    }
+
+
+def _serialize_user(user) -> dict | None:
+    if user is None:
+        return None
+    return {
+        "id": user.id,
+        "username": user.username,
+        "display_name": user.display_name,
+    }
+
+
+def _get_visible_post_ids(user=None, *, context: dict | None = None):
+    from bias_ext_posts.backend.models import Post
+    from bias_ext_posts.backend.post_query_service import apply_visibility_filters
+
+    queryset = Post.objects.all()
+    resolved_context = dict(context or {})
+    if resolved_context:
+        from bias_core.extensions.platform import apply_model_visibility_scope
+
+        return apply_model_visibility_scope(
+            Post,
+            queryset,
+            user=user,
+            ability=str(resolved_context.pop("ability", "view") or "view"),
+            context=resolved_context,
+        ).values("id")
+    return apply_visibility_filters(queryset, user).values("id")
+
+
+def _get_post_action_context(post_id: int, user=None, *, require_visible: bool = True) -> dict | None:
+    from bias_ext_posts.backend.models import Post
+    from bias_ext_posts.backend.post_query_service import apply_visibility_filters
+
+    queryset = Post.objects.select_related("discussion").filter(id=post_id)
+    if require_visible:
+        queryset = apply_visibility_filters(queryset, user)
+    row = (
+        queryset
+        .values(
+            "id",
+            "discussion_id",
+            "user_id",
+            "number",
+            "hidden_at",
+            "discussion__title",
+        )
+        .first()
+    )
+    if row is None:
+        return None
+    return {
+        "id": row["id"],
+        "discussion_id": row["discussion_id"],
+        "user_id": row["user_id"],
+        "number": row["number"],
+        "hidden_at": row["hidden_at"],
+        "discussion_title": row["discussion__title"] or "",
+    }
+
+
+def discussion_posts_service_provider() -> dict:
+    return {
         "create_first_post": _create_first_post,
         "get_first_post": _get_first_post,
-        "resolve_content_html": PostService.resolve_content_html,
         "update_first_post_content": _update_first_post_content,
         "resubmit_first_post": _resubmit_first_post,
         "approve_first_post": _approve_first_post,
@@ -48,11 +211,14 @@ def post_service_provider() -> dict:
         "approved_reply_counts_by_author": _approved_reply_counts_by_author,
         "approved_discussion_stats": _approved_discussion_stats,
         "delete_discussion_posts": _delete_discussion_posts,
-        "serialize": _serialize_post,
+        "get_post_number": _get_post_number,
+        "resolve_content_html": _resolve_post_content_html,
+    }
+
+
+def realtime_post_payload_service_provider() -> dict:
+    return {
         "serialize_by_id": _serialize_post_by_id,
-        "reply_notification_context": _reply_notification_context,
-        "notification_context": _notification_context,
-        "get_number": _get_post_number,
     }
 
 
@@ -285,6 +451,12 @@ def _serialize_post_by_id(post_id: int, user=None, **kwargs):
     if post is None:
         return None
     return serialize_post(post, user=user, **kwargs)
+
+
+def _resolve_post_content_html(post) -> str:
+    from bias_ext_posts.backend.services import PostService
+
+    return PostService.resolve_content_html(post)
 
 
 def _reply_notification_context(reply_to_post_id: int, post_id: int, from_user):

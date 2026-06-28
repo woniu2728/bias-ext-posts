@@ -12,6 +12,11 @@ class PostCreatedEvent(DomainEvent):
     actor_user_id: int
     reply_to_post_id: int | None = None
     is_approved: bool = True
+    post_number: int | None = None
+    discussion_title: str = ""
+    discussion_user_id: int | None = None
+    reply_to_post_user_id: int | None = None
+    reply_to_post_number: int | None = None
 
 
 @dataclass(frozen=True)
@@ -22,6 +27,8 @@ class PostApprovedEvent(DomainEvent):
     admin_user_id: int
     note: str = ""
     previous_status: str = ""
+    post_number: int | None = None
+    discussion_title: str = ""
 
 
 @dataclass(frozen=True)
@@ -32,6 +39,8 @@ class PostRejectedEvent(DomainEvent):
     admin_user_id: int
     note: str = ""
     previous_status: str = ""
+    post_number: int | None = None
+    discussion_title: str = ""
 
 
 @dataclass(frozen=True)
@@ -40,6 +49,8 @@ class PostResubmittedEvent(DomainEvent):
     discussion_id: int
     actor_user_id: int
     previous_status: str = ""
+    post_number: int | None = None
+    discussion_title: str = ""
 
 
 @dataclass(frozen=True)

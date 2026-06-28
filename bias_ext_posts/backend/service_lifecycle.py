@@ -13,6 +13,7 @@ from bias_core.extensions.runtime import (
     ensure_runtime_user_not_suspended,
     get_runtime_post_lifecycle_service,
     increment_runtime_user_comment_count,
+    clamp_runtime_discussion_read_states,
     mark_runtime_discussion_read,
     refresh_runtime_model_private,
     requires_runtime_content_approval,
@@ -69,8 +70,14 @@ def create_post(
         refresh_runtime_model_private(post, save=True)
 
         if not requires_approval:
+            participant_delta = 0 if Post.objects.filter(
+                discussion=discussion,
+                user=user,
+                approval_status=Post.APPROVAL_APPROVED,
+            ).exclude(id=post.id).exists() else 1
             type(discussion).objects.filter(id=discussion.id).update(
                 comment_count=F("comment_count") + 1,
+                participant_count=F("participant_count") + participant_delta,
                 last_posted_at=timezone.now(),
                 last_posted_user=user,
                 last_post_id=post.id,
@@ -83,6 +90,7 @@ def create_post(
                 discussion_id=discussion.id,
                 user=user,
                 last_read_post_number=post.number,
+                require_view=False,
             )
 
             _apply_post_created_extensions(
@@ -102,6 +110,11 @@ def create_post(
                     actor_user_id=user.id,
                     reply_to_post_id=reply_target.id if reply_target else None,
                     is_approved=True,
+                    post_number=post.number,
+                    discussion_title=discussion.title,
+                    discussion_user_id=getattr(discussion, "user_id", None),
+                    reply_to_post_user_id=getattr(reply_target, "user_id", None),
+                    reply_to_post_number=getattr(reply_target, "number", None),
                 )
             )
 
@@ -216,6 +229,8 @@ def update_post(
                     discussion_id=post.discussion_id,
                     actor_user_id=user.id,
                     previous_status=previous_approval_status,
+                    post_number=post.number,
+                    discussion_title=post.discussion.title if getattr(post, "discussion", None) else "",
                 )
             )
 
@@ -274,6 +289,10 @@ def delete_post(
 
         if counted_post:
             refresh_discussion_approved_stats_cb(discussion)
+            clamp_runtime_discussion_read_states(
+                discussion_id=discussion.id,
+                last_post_number=discussion.last_post_number,
+            )
             if post.user and post.type in user_counted_post_types:
                 increment_runtime_user_comment_count(post.user_id, -1)
 
@@ -330,6 +349,11 @@ def set_hidden_state(
 
         if should_adjust_counts:
             refresh_discussion_approved_stats_cb(post.discussion)
+            post.discussion.refresh_from_db(fields=["last_post_number"])
+            clamp_runtime_discussion_read_states(
+                discussion_id=post.discussion_id,
+                last_post_number=post.discussion.last_post_number,
+            )
             if post.user and post.type in user_counted_post_types:
                 delta = -1 if is_hidden else 1
                 increment_runtime_user_comment_count(post.user_id, delta)

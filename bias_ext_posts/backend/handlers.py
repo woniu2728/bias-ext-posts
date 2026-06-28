@@ -11,7 +11,7 @@ from bias_core.extensions.platform import (
 )
 from bias_core.extensions.platform import log_admin_action
 from bias_core.extensions.runtime import get_runtime_resource_registry
-from bias_core.extensions.forum import get_forum_registry
+from bias_core.extensions.platform import get_forum_registry
 from bias_core.extensions.platform import BadJsonApiRequest
 from bias_core.extensions import ResourceEndpointDefinition
 from bias_ext_posts.backend.models import Post
@@ -178,7 +178,35 @@ def _post_object_id(context) -> int:
 
 
 def _post_default_includes(context) -> tuple[str, ...]:
-    return tuple(context.get("default_include") or ())
+    default_include = tuple(context.get("default_include") or ())
+    if default_include:
+        return default_include
+    endpoint_name = _post_endpoint_name(context)
+    if not endpoint_name:
+        return ()
+    registry = get_resource_registry()
+    endpoint = registry.get_dispatch_endpoint(
+        "post",
+        endpoint_name,
+        str(context.get("method") or "GET"),
+        context,
+    )
+    return tuple(getattr(endpoint, "default_include", ()) or ())
+
+
+def _post_endpoint_name(context) -> str:
+    endpoint_name = str(context.get("endpoint") or "").strip()
+    if endpoint_name:
+        return endpoint_name
+    method = str(context.get("method") or getattr(context.get("request"), "method", "GET") or "GET").upper()
+    path = str(getattr(context.get("request"), "path", "") or "").rstrip("/")
+    if method == "GET" and "/posts/" in path:
+        return "show"
+    if method == "GET" and path.endswith("/posts"):
+        if "/discussions/" in path:
+            return "index"
+        return "global-index"
+    return ""
 
 
 def _post_resource_filters(context) -> dict[str, str]:

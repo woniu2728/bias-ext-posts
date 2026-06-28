@@ -12,7 +12,6 @@ from ninja_jwt.tokens import RefreshToken
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from bias_core.forum_registry import get_forum_registry
 from bias_core.extensions.runtime import (
     create_runtime_discussion,
     delete_runtime_discussion,
@@ -20,17 +19,22 @@ from bias_core.extensions.runtime import (
     get_runtime_discussion_state_model,
     set_runtime_discussion_hidden_state,
 )
-from bias_core.models import AuditLog
-from bias_core.extensions import ResourceEndpointDefinition
-from bias_core.testing import ResourceRegistry
-from bias_core.search_index_service import get_search_index_definitions
-from bias_core.testing import ExtensionRuntimeTestMixin, bootstrap_enabled_extension_application
-from bias_ext_posts.backend.resources import resolve_post_event_data
-from bias_ext_discussions.backend.visibility import (
-    build_post_visibility_q,
-    scope_discussion_view,
-    scope_post_view,
+from bias_core.extensions.platform import apply_model_visibility_scope
+from bias_core.extensions import ResourceDefinition, ResourceEndpointDefinition, ResourceRelationshipDefinition
+from bias_core.extensions.testing import (
+    AuditLog,
+    ExtensionApplication,
+    ExtensionRuntimeTestMixin,
+    ResourceRegistry,
+    bootstrap_enabled_extension_application,
+    capture_runtime_events,
+    get_forum_registry,
+    get_search_index_definitions,
 )
+from bias_core.extensions.bootstrap import (
+    get_extension_host,
+)
+from bias_ext_posts.backend.resources import resolve_post_event_data
 from bias_ext_posts.backend.handlers import post_resource_endpoints
 from bias_ext_posts.backend.models import Post
 from bias_ext_posts.backend.services import PostService
@@ -56,19 +60,96 @@ Discussion = RuntimeModelProxy(get_runtime_discussion_model)
 DiscussionUser = RuntimeModelProxy(get_runtime_discussion_state_model)
 
 
+def allow_all_model_visibility(queryset, context):
+    return queryset
+
+
+def scope_test_post_view(queryset, context):
+    user = context.get("user")
+    nested_context = {key: value for key, value in context.items() if key != "ability"}
+    PostModel = queryset.model
+    visible_queryset = queryset.filter(is_private=False, hidden_at__isnull=True)
+    private_queryset = apply_model_visibility_scope(
+        PostModel,
+        queryset.filter(is_private=True),
+        user=user,
+        ability="viewPrivate",
+        context=nested_context,
+    )
+    return (visible_queryset | private_queryset).distinct()
+
+
+def make_test_discussions_service(discussion_model, model_service):
+    def get_visible_ids(user=None, *, ability="view", context=None):
+        return apply_model_visibility_scope(
+            discussion_model,
+            discussion_model.objects.all(),
+            user=user,
+            ability=ability,
+            context=context or {},
+        ).values("id")
+
+    return {
+        "model": discussion_model,
+        "get_visible_ids": get_visible_ids,
+        "has_visibility": lambda *, ability=None: model_service.has_visibility(discussion_model, ability=ability),
+    }
+
+
 class PostsExtensionDiagnosticsTests(ExtensionRuntimeTestMixin, TestCase):
     def test_posts_extension_registers_runtime_service_provider(self):
         application = self.bootstrap_extensions("posts")
         service = application.get_service("posts.service")
+        discussion_posts = application.get_service("discussion.posts")
+        realtime_post_payload = application.get_service("realtime.post_payload")
 
         self.assertIn("posts.service", application.get_service_provider_keys(extension_id="posts"))
+        self.assertIn("discussion.posts", application.get_service_provider_keys(extension_id="posts"))
+        self.assertIn("realtime.post_payload", application.get_service_provider_keys(extension_id="posts"))
+        self.assertIn("search.target.post", application.get_service_provider_keys(extension_id="posts"))
+        post_target = application.get_service("search.target.post")
+        self.assertIs(post_target["model"], Post)
+        self.assertTrue(callable(post_target["apply_visibility"]))
+        self.assertTrue(
+            any(
+                definition.event_type.__name__ == "PostHiddenEvent"
+                for definition in application.events.get_listeners(extension_id="posts")
+            )
+        )
+        self.assertTrue(
+            any(
+                definition.event_type.__name__ == "PostCreatedEvent"
+                and definition.event_name == "post.created"
+                for definition in application.realtime.get_discussion_broadcasts(extension_id="posts")
+            )
+        )
+        self.assertTrue(
+            any(
+                definition.model is Post
+                for definition in application.models.get_visibility(extension_id="posts")
+            )
+        )
         self.assertIs(service["model"], Post)
         self.assertEqual(service["approval_approved"], Post.APPROVAL_APPROVED)
         self.assertEqual(service["approval_pending"], Post.APPROVAL_PENDING)
         self.assertEqual(service["approval_rejected"], Post.APPROVAL_REJECTED)
+        self.assertNotIn("discussion_posts", service)
+        self.assertEqual(
+            sorted(service["event_types"].keys()),
+            [
+                "posts.post.approved",
+                "posts.post.created",
+                "posts.post.deleted",
+                "posts.post.hidden",
+                "posts.post.rejected",
+                "posts.post.resubmitted",
+            ],
+        )
         for key in (
             "can_view",
             "get_by_id",
+            "get_visible_ids",
+            "get_action_context",
             "create",
             "update",
             "delete",
@@ -76,6 +157,10 @@ class PostsExtensionDiagnosticsTests(ExtensionRuntimeTestMixin, TestCase):
             "reply_notification_context",
             "notification_context",
             "get_number",
+            "serialize_by_id",
+        ):
+            self.assertTrue(callable(service[key]), key)
+        for key in (
             "create_first_post",
             "get_first_post",
             "update_first_post_content",
@@ -85,9 +170,23 @@ class PostsExtensionDiagnosticsTests(ExtensionRuntimeTestMixin, TestCase):
             "approved_reply_counts_by_author",
             "approved_discussion_stats",
             "delete_discussion_posts",
-            "serialize_by_id",
         ):
-            self.assertTrue(callable(service[key]), key)
+            self.assertNotIn(key, service)
+        for key in (
+            "create_first_post",
+            "get_first_post",
+            "update_first_post_content",
+            "resubmit_first_post",
+            "approve_first_post",
+            "reject_first_post",
+            "approved_reply_counts_by_author",
+            "approved_discussion_stats",
+            "delete_discussion_posts",
+            "get_post_number",
+            "resolve_content_html",
+        ):
+            self.assertTrue(callable(discussion_posts[key]), f"discussion.posts.{key}")
+        self.assertTrue(callable(realtime_post_payload["serialize_by_id"]))
 
     def test_posts_capabilities_are_filtered_when_extension_disabled(self):
         self.disable_extension_for_test("posts")
@@ -132,8 +231,7 @@ class PostsExtensionDiagnosticsTests(ExtensionRuntimeTestMixin, TestCase):
             and item["target_app_label_source"] == "manifest"
             for item in audit["items"]
         ))
-        self.assertIn("0001_initial.py", extension["migration_plan"]["pending_files"])
-        self.assertIn("0005_transfer_extension_owned_models_state.py", extension["migration_plan"]["pending_files"])
+        self.assertEqual(extension["migration_plan"]["pending_files"], [])
 
 
 class PostRegistryTests(ExtensionRuntimeTestMixin, TestCase):
@@ -176,7 +274,11 @@ class PostEventResourceTests(TestCase):
         )
 
 
-class PostPaginationTests(TestCase):
+class PostPaginationTests(ExtensionRuntimeTestMixin, TestCase):
+    def _pre_setup(self):
+        super()._pre_setup()
+        self.bootstrap_extensions("posts")
+
     def setUp(self):
         self.user = User.objects.create_user(
             username="poster",
@@ -280,6 +382,43 @@ class PostPaginationTests(TestCase):
         self.assertTrue(state["failed"])
         self.assertEqual(post.content, "Retry reply")
 
+    def test_create_post_counts_each_approved_participant_once(self):
+        other_user = User.objects.create_user(
+            username="participant",
+            email="participant@example.com",
+            password="password123",
+            is_email_confirmed=True,
+        )
+        discussion = create_runtime_discussion(
+            title="Participant count discussion",
+            content="First post",
+            user=self.user,
+        )
+
+        PostService.create_post(
+            discussion_id=discussion.id,
+            content="Same author reply",
+            user=self.user,
+        )
+        discussion.refresh_from_db()
+        self.assertEqual(discussion.participant_count, 1)
+
+        PostService.create_post(
+            discussion_id=discussion.id,
+            content="New participant reply",
+            user=other_user,
+        )
+        discussion.refresh_from_db()
+        self.assertEqual(discussion.participant_count, 2)
+
+        PostService.create_post(
+            discussion_id=discussion.id,
+            content="Same participant again",
+            user=other_user,
+        )
+        discussion.refresh_from_db()
+        self.assertEqual(discussion.participant_count, 2)
+
     def test_create_post_applies_runtime_private_checkers(self):
         discussion = create_runtime_discussion(
             title="Private reply discussion",
@@ -299,7 +438,9 @@ class PostPaginationTests(TestCase):
             )
 
         self.assertTrue(reply.is_private)
-        self.assertFalse(Post.objects.filter(build_post_visibility_q(self.user), id=reply.id).exists())
+        self.assertFalse(
+            PostService.apply_visibility_filters(Post.objects.filter(id=reply.id), self.user).exists()
+        )
 
     def test_approve_post_refreshes_runtime_private_state(self):
         discussion = create_runtime_discussion(
@@ -333,7 +474,6 @@ class PostPaginationTests(TestCase):
         self.assertTrue(approved.is_private)
 
     def test_view_private_scoper_allows_matching_private_post_visibility(self):
-        from bias_core.extensions.application import ExtensionApplication
         from bias_core.extensions import ExtensionModelVisibilityDefinition
 
         discussion_model = get_runtime_discussion_model()
@@ -360,13 +500,13 @@ class PostPaginationTests(TestCase):
         )
         Post.objects.filter(id__in=[allowed.id, denied.id]).update(is_private=True)
 
-        app = ExtensionApplication()
+        app = get_extension_host()
         app.models.register_visibility(
             "discussions",
             ExtensionModelVisibilityDefinition(
                 model=discussion_model,
                 ability="view",
-                scope=scope_discussion_view,
+                scope=allow_all_model_visibility,
             ),
         )
         app.models.register_visibility(
@@ -374,7 +514,7 @@ class PostPaginationTests(TestCase):
             ExtensionModelVisibilityDefinition(
                 model=Post,
                 ability="view",
-                scope=scope_post_view,
+                scope=scope_test_post_view,
             ),
         )
         app.models.register_visibility(
@@ -385,8 +525,13 @@ class PostPaginationTests(TestCase):
                 scope=lambda queryset, context: queryset.filter(id=allowed.id),
             ),
         )
+        app.register_service("discussions.service", make_test_discussions_service(discussion_model, app.models))
 
-        with patch("bias_core.extensions.runtime_models.get_runtime_model_service", return_value=app.models):
+        with patch("bias_core.extensions.runtime_models.get_runtime_model_service", return_value=app.models), patch(
+            "bias_ext_posts.backend.visibility.get_runtime_discussion_model",
+            create=True,
+            side_effect=AssertionError("posts visibility must use discussions runtime visible ids contract"),
+        ), CaptureQueriesContext(connection) as queries:
             visible_ids = set(
                 PostService.apply_visibility_filters(
                     Post.objects.filter(id__in=[allowed.id, denied.id]),
@@ -396,9 +541,9 @@ class PostPaginationTests(TestCase):
 
         self.assertIn(allowed.id, visible_ids)
         self.assertNotIn(denied.id, visible_ids)
+        self.assertLessEqual(len(queries), 4)
 
     def test_hide_posts_scoper_allows_matching_hidden_post_visibility(self):
-        from bias_core.extensions.application import ExtensionApplication
         from bias_core.extensions import ExtensionModelVisibilityDefinition
 
         discussion_model = get_runtime_discussion_model()
@@ -430,21 +575,13 @@ class PostPaginationTests(TestCase):
         )
         Post.objects.filter(id__in=[allowed.id, denied.id]).update(hidden_at=timezone.now())
 
-        app = ExtensionApplication()
+        app = get_extension_host()
         app.models.register_visibility(
             "discussions",
             ExtensionModelVisibilityDefinition(
                 model=discussion_model,
                 ability="view",
-                scope=scope_discussion_view,
-            ),
-        )
-        app.models.register_visibility(
-            "discussions",
-            ExtensionModelVisibilityDefinition(
-                model=Post,
-                ability="view",
-                scope=scope_post_view,
+                scope=allow_all_model_visibility,
             ),
         )
         app.models.register_visibility(
@@ -455,20 +592,28 @@ class PostPaginationTests(TestCase):
                 scope=lambda queryset, context: queryset.filter(id=allowed_discussion.id),
             ),
         )
+        app.register_service("discussions.service", make_test_discussions_service(discussion_model, app.models))
 
-        with patch("bias_core.extensions.runtime_models.get_runtime_model_service", return_value=app.models):
+        with patch("bias_core.extensions.runtime_models.get_runtime_model_service", return_value=app.models), patch(
+            "bias_ext_posts.backend.visibility.get_runtime_discussion_model",
+            create=True,
+            side_effect=AssertionError("posts visibility must use discussions runtime visible ids contract"),
+        ), patch(
+            "bias_ext_posts.backend.visibility.has_runtime_forum_permission",
+            return_value=False,
+        ), CaptureQueriesContext(connection) as queries:
             visible_ids = set(
                 PostService.apply_visibility_filters(
                     Post.objects.filter(id__in=[allowed.id, denied.id]),
                     reader,
                 ).values_list("id", flat=True)
             )
-            allowed.refresh_from_db()
             can_view_allowed = PostService._can_view_post(allowed, reader)
 
         self.assertIn(allowed.id, visible_ids)
         self.assertNotIn(denied.id, visible_ids)
         self.assertTrue(can_view_allowed)
+        self.assertLessEqual(len(queries), 6)
 
     def test_own_reply_advances_read_state_without_auto_follow(self):
         self.user.preferences = {"follow_after_reply": False}
@@ -539,8 +684,8 @@ class PostPaginationTests(TestCase):
             user=self.user,
         )
 
-        mocked_bus = Mock()
-        with patch("bias_core.domain_events.get_forum_event_bus", return_value=mocked_bus):
+        events, dispatch_patch = capture_runtime_events()
+        with dispatch_patch:
             with self.captureOnCommitCallbacks(execute=True) as callbacks:
                 post = PostService.create_post(
                     discussion_id=discussion.id,
@@ -548,9 +693,46 @@ class PostPaginationTests(TestCase):
                     user=self.user,
                 )
 
-        self.assertEqual(len(callbacks), 1)
-        event = mocked_bus.dispatch.call_args.args[0]
+        self.assertGreaterEqual(len(callbacks), 1)
+        event = next(item for item in events if item.__class__.__name__ == "PostCreatedEvent")
         self.assertEqual(event.post_id, post.id)
+        self.assertEqual(event.post_number, post.number)
+        self.assertEqual(event.discussion_title, discussion.title)
+        self.assertEqual(event.discussion_user_id, self.user.id)
+
+    def test_create_direct_reply_event_carries_reply_target_context(self):
+        discussion = create_runtime_discussion(
+            title="Direct reply event discussion",
+            content="First post",
+            user=self.user,
+        )
+        target_author = User.objects.create_user(
+            username="reply-target-author",
+            email="reply-target-author@example.com",
+            password="password123",
+            is_email_confirmed=True,
+        )
+        target = PostService.create_post(
+            discussion_id=discussion.id,
+            content="Reply target",
+            user=target_author,
+        )
+
+        events, dispatch_patch = capture_runtime_events()
+        with dispatch_patch:
+            with self.captureOnCommitCallbacks(execute=True):
+                post = PostService.create_post(
+                    discussion_id=discussion.id,
+                    content="Direct reply",
+                    user=self.user,
+                    reply_to_post_id=target.id,
+                )
+
+        event = next(item for item in events if item.__class__.__name__ == "PostCreatedEvent")
+        self.assertEqual(event.post_id, post.id)
+        self.assertEqual(event.reply_to_post_id, target.id)
+        self.assertEqual(event.reply_to_post_user_id, target_author.id)
+        self.assertEqual(event.reply_to_post_number, target.number)
 
 
 class PostApiTests(TestCase):
@@ -684,6 +866,50 @@ class PostApiTests(TestCase):
         self.assertEqual(response.status_code, 200, response.content)
         self.assertTrue(response.json()["mutated_by_resource_endpoint"])
 
+    def test_post_detail_static_route_uses_resource_endpoint_default_include(self):
+        def mutate_endpoint(endpoint):
+            return ResourceEndpointDefinition(
+                resource=endpoint.resource,
+                endpoint=endpoint.endpoint,
+                module_id="test",
+                handler=endpoint.handler,
+                methods=endpoint.methods,
+                default_include=("owner",),
+            )
+
+        registry = ResourceRegistry()
+        for endpoint in post_resource_endpoints():
+            registry.register_endpoint(endpoint)
+        registry.register_relationship(ResourceRelationshipDefinition(
+            resource="post",
+            relationship="owner",
+            module_id="test",
+            resolver=lambda post, context: post.user,
+            resource_type="user_summary",
+            plain_output="linkage",
+        ))
+        registry.register_resource(ResourceDefinition(
+            resource="user_summary",
+            module_id="test",
+            resolver=lambda user, context: {"id": user.id},
+        ))
+        registry.register_endpoint(
+            ResourceEndpointDefinition(
+                resource="post",
+                endpoint="show",
+                module_id="test",
+                operation="mutate",
+                mutator=mutate_endpoint,
+            )
+        )
+
+        with patch("bias_ext_posts.backend.handlers.get_runtime_resource_registry", return_value=registry):
+            with patch("bias_core.resource_dispatcher.get_runtime_resource_registry", return_value=registry):
+                response = self.client.get(f"/api/posts/{self.post.id}")
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["owner"], {"type": "user_summary", "id": str(self.author.id)})
+
     def test_post_list_avoids_n_plus_one_for_registered_user_summary(self):
         for index in range(3):
             PostService.create_post(
@@ -806,6 +1032,25 @@ class PostApiTests(TestCase):
         self.reporter.refresh_from_db()
         self.assertEqual(self.reporter.comment_count, 0)
 
+    def test_delete_last_approved_reply_clamps_discussion_read_state(self):
+        trailing_reply = PostService.create_post(
+            discussion_id=self.discussion.id,
+            content="最后一条会被删除的回复",
+            user=self.reporter,
+        )
+        DiscussionUser.objects.update_or_create(
+            discussion=self.discussion,
+            user=self.author,
+            defaults={"last_read_post_number": trailing_reply.number},
+        )
+
+        PostService.delete_post(trailing_reply.id, self.reporter)
+
+        self.discussion.refresh_from_db()
+        state = DiscussionUser.objects.get(discussion=self.discussion, user=self.author)
+        self.assertEqual(state.last_read_post_number, self.discussion.last_post_number)
+        self.assertEqual(self.discussion.last_post_number, self.post.number)
+
     def test_delete_pending_reply_does_not_decrement_comment_stats(self):
         trusted_group = Group.objects.create(name="DeletePendingReplyTrusted", color="#4d698e")
         Permission.objects.create(group=trusted_group, permission="replyWithoutApproval")
@@ -876,6 +1121,25 @@ class PostApiTests(TestCase):
         self.author.refresh_from_db()
         self.assertEqual(self.discussion.comment_count, 2)
         self.assertEqual(self.author.comment_count, 1)
+
+    def test_hiding_last_approved_reply_clamps_discussion_read_state(self):
+        trailing_reply = PostService.create_post(
+            discussion_id=self.discussion.id,
+            content="最后一条会被隐藏的回复",
+            user=self.reporter,
+        )
+        DiscussionUser.objects.update_or_create(
+            discussion=self.discussion,
+            user=self.author,
+            defaults={"last_read_post_number": trailing_reply.number},
+        )
+
+        PostService.set_hidden_state(trailing_reply, self.admin, True)
+
+        self.discussion.refresh_from_db()
+        state = DiscussionUser.objects.get(discussion=self.discussion, user=self.author)
+        self.assertEqual(state.last_read_post_number, self.discussion.last_post_number)
+        self.assertEqual(self.discussion.last_post_number, self.post.number)
 
     def test_post_hide_endpoint_toggles_hidden_state_for_admin(self):
         response = self.client.post(

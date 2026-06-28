@@ -5,7 +5,7 @@ from typing import Any, List, Optional, Tuple
 
 from django.db import IntegrityError
 
-from bias_core.extensions.forum import sqlite_write_retry
+from bias_core.extensions.platform import sqlite_write_retry
 from bias_core.extensions.platform import get_forum_event_bus
 from bias_core.extensions.platform import evaluate_extension_policy
 from bias_core.extensions.runtime import (
@@ -13,7 +13,7 @@ from bias_core.extensions.runtime import (
     refresh_runtime_discussion_approved_stats,
     validate_runtime_replyable_discussion,
 )
-from bias_core.extensions.forum import get_forum_registry
+from bias_core.extensions.platform import get_forum_registry
 from bias_ext_posts.backend import post_query_service, service_lifecycle, service_moderation
 from bias_ext_posts.backend.models import Post
 from bias_core.extensions.runtime import (

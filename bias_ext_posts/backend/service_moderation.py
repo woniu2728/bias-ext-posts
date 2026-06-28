@@ -63,6 +63,7 @@ def approve_post(
                     discussion_id=discussion.id,
                     user=post.user,
                     last_read_post_number=post.number,
+                    require_view=False,
                 )
 
             _apply_post_approved_extensions(
@@ -82,6 +83,8 @@ def approve_post(
                     admin_user_id=admin_user.id,
                     note=note,
                     previous_status=previous_status,
+                    post_number=post.number,
+                    discussion_title=discussion.title if discussion else "",
                 )
             )
     post.refresh_from_db()
@@ -138,6 +141,8 @@ def reject_post(
                     admin_user_id=admin_user.id,
                     note=note,
                     previous_status=previous_status,
+                    post_number=post.number,
+                    discussion_title=post.discussion.title if getattr(post, "discussion", None) else "",
                 )
             )
     return post
