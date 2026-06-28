@@ -254,6 +254,7 @@ class PostService:
             post,
             admin_user,
             is_hidden,
+            can_hide_post_cb=PostService.can_hide_post,
             discussion_counted_post_types=_get_discussion_counted_post_types(),
             user_counted_post_types=_get_user_counted_post_types(),
             refresh_discussion_approved_stats_cb=PostService._refresh_discussion_approved_stats,

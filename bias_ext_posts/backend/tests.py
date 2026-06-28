@@ -1245,13 +1245,37 @@ class PostApiTests(TestCase):
         self.assertEqual(response.status_code, 200, response.content)
         self.assertFalse(response.json()["is_hidden"])
 
-    def test_non_staff_cannot_hide_post(self):
+    def test_user_without_hide_permission_cannot_hide_post(self):
         response = self.client.post(
             f"/api/posts/{self.post.id}/hide",
             **self.auth_header(),
         )
         self.assertEqual(response.status_code, 403, response.content)
-        self.assertIn("只有管理员", response.json()["error"])
+        self.assertIn("没有权限", response.json()["error"])
+
+    def test_non_staff_user_with_hide_posts_permission_can_hide_post(self):
+        moderator_group = Group.objects.create(name="Post Hide Moderators", color="#4d698e")
+        Permission.objects.create(group=moderator_group, permission="viewForum")
+        Permission.objects.create(group=moderator_group, permission="discussion.hidePosts")
+        self.reporter.user_groups.add(moderator_group)
+
+        response = self.client.post(
+            f"/api/posts/{self.post.id}/hide",
+            **self.auth_header(),
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertTrue(response.json()["is_hidden"])
+        self.post.refresh_from_db()
+        self.assertEqual(self.post.hidden_user_id, self.reporter.id)
+
+        restore_response = self.client.post(
+            f"/api/posts/{self.post.id}/hide",
+            **self.auth_header(),
+        )
+
+        self.assertEqual(restore_response.status_code, 200, restore_response.content)
+        self.assertFalse(restore_response.json()["is_hidden"])
 
     def test_hiding_post_writes_admin_audit_log(self):
         response = self.client.post(

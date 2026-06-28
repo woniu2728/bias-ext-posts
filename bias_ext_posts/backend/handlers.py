@@ -439,9 +439,10 @@ def dispatch_post_toggle_hide(context):
         next_hidden = post.hidden_at is None
         PostService.set_hidden_state(post, context["user"], next_hidden)
         post.refresh_from_db()
+        action_prefix = "admin" if getattr(context["user"], "is_staff", False) else "moderator"
         log_admin_action(
             request,
-            "admin.post.hide" if post.hidden_at else "admin.post.restore",
+            f"{action_prefix}.post.hide" if post.hidden_at else f"{action_prefix}.post.restore",
             target_type="post",
             target_id=post.id,
             data={

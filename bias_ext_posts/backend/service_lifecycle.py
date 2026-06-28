@@ -319,15 +319,16 @@ def delete_post(
 
 def set_hidden_state(
     post: Post,
-    admin_user,
+    user,
     is_hidden: bool,
     *,
+    can_hide_post_cb,
     discussion_counted_post_types,
     user_counted_post_types,
     refresh_discussion_approved_stats_cb,
 ) -> Post:
-    if not admin_user.is_staff:
-        raise PermissionDenied("只有管理员可以隐藏或恢复回复")
+    if not can_hide_post_cb(post, user):
+        raise PermissionDenied("没有权限隐藏或恢复回复")
     if post.number == 1:
         raise ValueError("不能直接隐藏首贴，请改为隐藏讨论")
 
@@ -343,7 +344,7 @@ def set_hidden_state(
 
     with transaction.atomic():
         post.hidden_at = hidden_at
-        post.hidden_user = admin_user if is_hidden else None
+        post.hidden_user = user if is_hidden else None
         refresh_runtime_model_private(post)
         post.save(update_fields=["hidden_at", "hidden_user", "is_private"])
 
@@ -367,7 +368,7 @@ def set_hidden_state(
         _apply_post_hidden_extensions(
             post,
             context={
-                "actor": admin_user,
+                "actor": user,
                 "is_hidden": is_hidden,
                 "was_hidden": was_hidden,
                 "was_counted": should_adjust_counts,
@@ -378,7 +379,7 @@ def set_hidden_state(
             PostHiddenEvent(
                 post_id=post.id,
                 discussion_id=post.discussion_id,
-                actor_user_id=admin_user.id,
+                actor_user_id=user.id,
                 post_number=post.number,
                 is_hidden=is_hidden,
             )
