@@ -338,18 +338,15 @@ def set_hidden_state(
         refresh_runtime_model_private(post)
         post.save(update_fields=["hidden_at", "hidden_user", "is_private"])
 
-        _apply_post_hidden_extensions(
-            post,
-            context={
-                "actor": admin_user,
-                "is_hidden": is_hidden,
-                "was_hidden": was_hidden,
-            },
-        )
-
         if should_adjust_counts:
             refresh_discussion_approved_stats_cb(post.discussion)
-            post.discussion.refresh_from_db(fields=["last_post_number"])
+            post.discussion.refresh_from_db(fields=[
+                "comment_count",
+                "last_posted_at",
+                "last_posted_user",
+                "last_post_id",
+                "last_post_number",
+            ])
             clamp_runtime_discussion_read_states(
                 discussion_id=post.discussion_id,
                 last_post_number=post.discussion.last_post_number,
@@ -357,6 +354,16 @@ def set_hidden_state(
             if post.user and post.type in user_counted_post_types:
                 delta = -1 if is_hidden else 1
                 increment_runtime_user_comment_count(post.user_id, delta)
+
+        _apply_post_hidden_extensions(
+            post,
+            context={
+                "actor": admin_user,
+                "is_hidden": is_hidden,
+                "was_hidden": was_hidden,
+                "was_counted": should_adjust_counts,
+            },
+        )
 
         dispatch_forum_event_after_commit(
             PostHiddenEvent(

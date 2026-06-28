@@ -9,4 +9,5 @@ def handle_post_hidden_timeline(event: PostHiddenEvent) -> None:
         event,
         "post_hidden",
         extra={"post_type": "postHidden"},
+        update_discussion_last_post=False,
     )
