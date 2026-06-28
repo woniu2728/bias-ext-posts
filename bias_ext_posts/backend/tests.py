@@ -1104,6 +1104,20 @@ class PostApiTests(TestCase):
         self.assertEqual(response.status_code, 403, response.content)
         self.assertEqual(response.json()["error"], "没有权限回复讨论")
 
+    def test_create_post_response_includes_user_and_discussion_defaults(self):
+        response = self.client.post(
+            f"/api/discussions/{self.discussion.id}/posts",
+            data='{"content":"默认 include 回复"}',
+            content_type="application/json",
+            **self.auth_header(),
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        payload = response.json()
+        self.assertEqual(payload["user"]["id"], self.reporter.id)
+        self.assertEqual(payload["discussion"]["id"], self.discussion.id)
+        self.assertEqual(payload["discussion"]["title"], self.discussion.title)
+
     def test_delete_last_approved_reply_rebuilds_discussion_last_post_stats(self):
         trailing_reply = PostService.create_post(
             discussion_id=self.discussion.id,
@@ -1549,6 +1563,39 @@ class PostApiTests(TestCase):
         self.assertEqual(response.status_code, 200, response.content)
         reply.refresh_from_db()
         self.assertEqual(reply.content, "已经修改")
+        payload = response.json()
+        self.assertEqual(payload["edited_user"]["id"], self.reporter.id)
+        self.assertEqual(payload["discussion"]["id"], self.discussion.id)
+
+    def test_update_post_response_default_includes_avoid_user_group_query_per_relationship(self):
+        member_group = Group.objects.create(name="ReplyAuthorEditOwnQueries", color="#4d698e")
+        Permission.objects.create(group=member_group, permission="discussion.reply")
+        Permission.objects.create(group=member_group, permission="post.editOwn")
+        self.reporter.user_groups.add(member_group)
+        reply = PostService.create_post(
+            discussion_id=self.discussion.id,
+            content="查询预算编辑",
+            user=self.reporter,
+        )
+
+        with CaptureQueriesContext(connection) as context:
+            response = self.client.patch(
+                f"/api/posts/{reply.id}",
+                data='{"content":"查询预算已修改"}',
+                content_type="application/json",
+                **self.auth_header(),
+            )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        payload = response.json()
+        self.assertEqual(payload["edited_user"]["primary_group"]["name"], member_group.name)
+        self.assertEqual(payload["discussion"]["id"], self.discussion.id)
+        select_group_queries = [
+            query["sql"]
+            for query in context.captured_queries
+            if "user_groups" in query["sql"].lower()
+        ]
+        self.assertLessEqual(len(select_group_queries), 2)
 
     def test_user_with_global_delete_permission_can_delete_others_reply(self):
         moderator = User.objects.create_user(

@@ -98,6 +98,7 @@ def post_resource_endpoints():
             path="discussions/{object_id}/posts",
             absolute_path=True,
             auth_required=True,
+            default_include=("user", "discussion"),
         )
     )
     add(
@@ -134,6 +135,7 @@ def post_resource_endpoints():
             path="posts/{object_id}",
             absolute_path=True,
             auth_required=True,
+            default_include=("edited_user", "discussion"),
         )
     )
     add(
@@ -298,6 +300,8 @@ def dispatch_post_global_index(context):
 def dispatch_post_create(context):
     discussion_id = _post_object_id(context)
     payload = PostCreateSchema(**_post_payload(context))
+    resource_options = context.get("resource_options") or parse_resource_query_options(context["request"], "post")
+    default_includes = _post_default_includes(context)
     try:
         post = PostService.create_post(
             discussion_id=discussion_id,
@@ -305,7 +309,18 @@ def dispatch_post_create(context):
             user=context["user"],
             reply_to_post_id=payload.reply_to_post_id,
         )
-        return serialize_post(post, context["user"])
+        post = _reload_post_for_response(
+            post.id,
+            context["user"],
+            resource_options=resource_options,
+            default_includes=default_includes,
+        ) or post
+        return serialize_post(
+            post,
+            context["user"],
+            resource_options=resource_options,
+            default_includes=default_includes,
+        )
     except PermissionDenied as e:
         return api_error(str(e), status=403)
     except ValueError as e:
@@ -385,19 +400,45 @@ def dispatch_post_show(context):
 def dispatch_post_update(context):
     post_id = _post_object_id(context)
     payload = PostUpdateSchema(**_post_payload(context))
+    resource_options = context.get("resource_options") or parse_resource_query_options(context["request"], "post")
+    default_includes = _post_default_includes(context)
     try:
         post = PostService.update_post(
             post_id=post_id,
             user=context["user"],
             content=payload.content,
         )
-        return serialize_post(post, context["user"])
+        post = _reload_post_for_response(
+            post.id,
+            context["user"],
+            resource_options=resource_options,
+            default_includes=default_includes,
+        ) or post
+        return serialize_post(
+            post,
+            context["user"],
+            resource_options=resource_options,
+            default_includes=default_includes,
+        )
     except Post.DoesNotExist:
         return api_error("帖子不存在", status=404)
     except PermissionDenied as e:
         return api_error(str(e), status=403)
     except ValueError as e:
         return api_error(str(e), status=400)
+
+
+def _reload_post_for_response(post_id: int, user, *, resource_options=None, default_includes=()):
+    return PostService.get_post_by_id(
+        post_id,
+        user,
+        preload=lambda queryset: apply_post_resource_preloads(
+            queryset,
+            user=user,
+            resource_options=resource_options,
+            default_includes=default_includes,
+        ),
+    )
 
 
 def dispatch_post_delete(context):
