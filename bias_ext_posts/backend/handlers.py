@@ -109,6 +109,7 @@ def post_resource_endpoints():
             methods=("GET",),
             path="discussions/{object_id}/posts",
             absolute_path=True,
+            default_include=("user", "edited_user", "hidden_user", "discussion"),
         )
     )
     add(
@@ -120,6 +121,7 @@ def post_resource_endpoints():
             methods=("GET",),
             path="posts/{object_id}",
             absolute_path=True,
+            default_include=("user", "edited_user", "hidden_user", "discussion"),
         )
     )
     add(

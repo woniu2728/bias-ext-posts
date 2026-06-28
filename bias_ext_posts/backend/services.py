@@ -378,6 +378,24 @@ class PostService:
         ))
 
     @staticmethod
+    def can_hide_post(post: Post, user: Any) -> bool:
+        if not user or not user.is_authenticated:
+            return False
+        if user.is_suspended:
+            return False
+        allowed = (
+            has_runtime_forum_permission(user, "post.hide")
+            or has_runtime_forum_permission(user, "discussion.hidePosts")
+            or has_runtime_forum_permission(user, "discussion.hide")
+        )
+        return bool(evaluate_extension_policy(
+            "post.hide",
+            default=allowed,
+            user=user,
+            post=post,
+        ))
+
+    @staticmethod
     def _render_markdown(content: str) -> str:
         """
         渲染Markdown为HTML

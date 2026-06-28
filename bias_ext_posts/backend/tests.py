@@ -840,14 +840,43 @@ class PostApiTests(TestCase):
     def test_post_detail_supports_resource_field_selection(self):
         response = self.client.get(
             f"/api/posts/{self.post.id}",
-            {"fields[post]": "post_type"},
+            {"fields[post]": "post_type,can_hide"},
+            **self.admin_auth_header(),
         )
 
         self.assertEqual(response.status_code, 200, response.content)
         payload = response.json()
         self.assertIn("post_type", payload)
+        self.assertTrue(payload["can_hide"])
         self.assertNotIn("can_edit", payload)
         self.assertNotIn("open_flags", payload)
+
+    def test_post_detail_exposes_hidden_user_and_hide_capability(self):
+        PostService.set_hidden_state(self.post, self.admin, True)
+
+        response = self.client.get(
+            f"/api/posts/{self.post.id}",
+            {"fields[post]": "can_hide"},
+            **self.admin_auth_header(),
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        payload = response.json()
+        self.assertTrue(payload["can_hide"])
+        self.assertEqual(payload["hidden_user"]["id"], self.admin.id)
+
+        visible_post = PostService.create_post(
+            discussion_id=self.discussion.id,
+            content="Visible can hide check",
+            user=self.author,
+        )
+        guest_response = self.client.get(
+            f"/api/posts/{visible_post.id}",
+            {"fields[post]": "can_hide"},
+        )
+
+        self.assertEqual(guest_response.status_code, 200, guest_response.content)
+        self.assertFalse(guest_response.json()["can_hide"])
 
     def test_post_detail_supports_explicit_relationship_includes(self):
         response = self.client.get(
@@ -956,6 +985,35 @@ class PostApiTests(TestCase):
             if "user_groups" in query["sql"].lower()
         ]
         self.assertLessEqual(len(select_group_queries), 2)
+
+    def test_post_list_default_hidden_user_include_avoids_group_query_per_post(self):
+        for index in range(3):
+            post = PostService.create_post(
+                discussion_id=self.discussion.id,
+                content=f"隐藏回复 {index}",
+                user=self.author,
+            )
+            PostService.set_hidden_state(post, self.admin, True)
+
+        with CaptureQueriesContext(connection) as context:
+            response = self.client.get(
+                f"/api/discussions/{self.discussion.id}/posts",
+                **self.admin_auth_header(),
+            )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        hidden_items = [
+            item for item in response.json()["data"]
+            if item.get("hidden_user")
+        ]
+        self.assertGreaterEqual(len(hidden_items), 3)
+        self.assertTrue(all(item["hidden_user"]["id"] == self.admin.id for item in hidden_items))
+        select_group_queries = [
+            query["sql"]
+            for query in context.captured_queries
+            if "user_groups" in query["sql"].lower()
+        ]
+        self.assertLessEqual(len(select_group_queries), 3)
 
     def test_discussion_posts_api_supports_windowed_queries(self):
         for index in range(3, 13):

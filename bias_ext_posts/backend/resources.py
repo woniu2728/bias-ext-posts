@@ -38,6 +38,13 @@ def post_resource_field_definitions():
         ),
         ResourceFieldDefinition(
             resource="post",
+            field="can_hide",
+            module_id="posts",
+            resolver=resolve_post_can_hide,
+            description="当前用户是否可以隐藏或恢复该回复。",
+        ),
+        ResourceFieldDefinition(
+            resource="post",
             field="post_type",
             module_id="posts",
             resolver=resolve_post_type_definition,
@@ -114,6 +121,13 @@ def resolve_post_can_delete(post, context: dict) -> bool:
 
     user = context.get("user")
     return bool(user and PostService.can_delete_post(post, user))
+
+
+def resolve_post_can_hide(post, context: dict) -> bool:
+    from bias_ext_posts.backend.services import PostService
+
+    user = context.get("user")
+    return bool(user and PostService.can_hide_post(post, user))
 
 
 def resolve_post_type_definition(post, context: dict) -> dict | None:
