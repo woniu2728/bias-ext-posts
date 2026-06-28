@@ -47,4 +47,14 @@ def permission_definitions():
             description="允许删除任意普通回复。",
             required_permissions=("discussion.hide",),
         ),
+        PermissionDefinition(
+            code="discussion.viewIpsPosts",
+            label="查看回复 IP",
+            section="moderate",
+            section_label="内容管理",
+            module_id=EXTENSION_ID,
+            icon="fas fa-network-wired",
+            description="允许在回复 API 中查看普通回复的 IP 地址。",
+            required_permissions=("viewForum",),
+        ),
     )

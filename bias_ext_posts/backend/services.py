@@ -403,6 +403,20 @@ class PostService:
         ))
 
     @staticmethod
+    def can_view_post_ip(post: Post, user: Any) -> bool:
+        if not user or not user.is_authenticated:
+            return False
+        if getattr(post, "type", "") != "comment":
+            return False
+        allowed = has_runtime_forum_permission(user, "discussion.viewIpsPosts")
+        return bool(evaluate_extension_policy(
+            "post.view_ip",
+            default=allowed,
+            user=user,
+            post=post,
+        ))
+
+    @staticmethod
     def _author_can_hide_post(post: Post, user: Any) -> bool:
         hidden_user_id = getattr(post, "hidden_user_id", None)
         if getattr(post, "hidden_at", None) is not None and hidden_user_id != getattr(user, "id", None):

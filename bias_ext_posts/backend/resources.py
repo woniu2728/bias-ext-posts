@@ -45,6 +45,14 @@ def post_resource_field_definitions():
         ),
         ResourceFieldDefinition(
             resource="post",
+            field="ip_address",
+            module_id="posts",
+            resolver=resolve_post_ip_address,
+            visible=is_post_ip_address_visible,
+            description="有权限用户可见的普通回复 IP 地址。",
+        ),
+        ResourceFieldDefinition(
+            resource="post",
             field="post_type",
             module_id="posts",
             resolver=resolve_post_type_definition,
@@ -128,6 +136,17 @@ def resolve_post_can_hide(post, context: dict) -> bool:
 
     user = context.get("user")
     return bool(user and PostService.can_hide_post(post, user))
+
+
+def resolve_post_ip_address(post, context: dict) -> str | None:
+    return getattr(post, "ip_address", None)
+
+
+def is_post_ip_address_visible(post, context: dict) -> bool:
+    from bias_ext_posts.backend.services import PostService
+
+    user = context.get("user")
+    return bool(user and PostService.can_view_post_ip(post, user))
 
 
 def resolve_post_type_definition(post, context: dict) -> dict | None:

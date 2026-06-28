@@ -214,6 +214,7 @@ class PostsExtensionDiagnosticsTests(ExtensionRuntimeTestMixin, TestCase):
         self.assertIn("post.deleteOwn", permission_codes)
         self.assertIn("post.edit", permission_codes)
         self.assertIn("post.delete", permission_codes)
+        self.assertIn("discussion.viewIpsPosts", permission_codes)
 
     def test_posts_extension_registers_post_resource_base_serializer(self):
         application = self.bootstrap_extensions("posts")
@@ -886,6 +887,68 @@ class PostApiTests(TestCase):
 
         self.assertEqual(guest_response.status_code, 200, guest_response.content)
         self.assertFalse(guest_response.json()["can_hide"])
+
+    def test_post_detail_hides_ip_address_without_permission(self):
+        self.post.ip_address = "203.0.113.10"
+        self.post.save(update_fields=["ip_address"])
+
+        response = self.client.get(
+            f"/api/posts/{self.post.id}",
+            {"fields[post]": "ip_address"},
+            **self.auth_header(),
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertNotIn("ip_address", response.json())
+
+    def test_post_detail_exposes_ip_address_to_allowed_actor(self):
+        self.post.ip_address = "203.0.113.10"
+        self.post.save(update_fields=["ip_address"])
+
+        response = self.client.get(
+            f"/api/posts/{self.post.id}",
+            {"fields[post]": "ip_address"},
+            **self.admin_auth_header(),
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["ip_address"], "203.0.113.10")
+
+    def test_post_detail_exposes_ip_address_to_permission_group_member(self):
+        self.post.ip_address = "203.0.113.10"
+        self.post.save(update_fields=["ip_address"])
+        moderator_group = Group.objects.create(name="IP Moderators")
+        self.reporter.user_groups.add(moderator_group)
+        Permission.objects.create(group=moderator_group, permission="viewForum")
+        Permission.objects.create(group=moderator_group, permission="discussion.viewIpsPosts")
+
+        response = self.client.get(
+            f"/api/posts/{self.post.id}",
+            {"fields[post]": "ip_address"},
+            **self.auth_header(),
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["ip_address"], "203.0.113.10")
+
+    def test_post_detail_hides_ip_address_for_event_post(self):
+        event_post = Post.objects.create(
+            discussion=self.discussion,
+            user=self.author,
+            number=99,
+            type="discussionRenamed",
+            content="from:Old\nto:New",
+            ip_address="203.0.113.10",
+        )
+
+        response = self.client.get(
+            f"/api/posts/{event_post.id}",
+            {"fields[post]": "ip_address"},
+            **self.admin_auth_header(),
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertNotIn("ip_address", response.json())
 
     def test_post_detail_supports_explicit_relationship_includes(self):
         response = self.client.get(
