@@ -1228,6 +1228,7 @@ class PostApiTests(TestCase):
         self.discussion.refresh_from_db()
         self.reporter.refresh_from_db()
         self.assertEqual(self.discussion.comment_count, 3)
+        self.assertEqual(self.discussion.participant_count, 2)
         self.assertEqual(self.reporter.comment_count, 1)
         self.assertEqual(self.discussion.last_post_id, pending_post.id)
 
@@ -1242,8 +1243,29 @@ class PostApiTests(TestCase):
         self.discussion.refresh_from_db()
         self.reporter.refresh_from_db()
         self.assertEqual(self.discussion.comment_count, 2)
+        self.assertEqual(self.discussion.participant_count, 1)
         self.assertEqual(self.reporter.comment_count, 0)
         self.assertEqual(self.discussion.last_post_id, self.post.id)
+
+    def test_deleting_hidden_reply_does_not_decrement_discussion_or_author_counts(self):
+        hidden_reply = PostService.create_post(
+            discussion_id=self.discussion.id,
+            content="隐藏后删除",
+            user=self.reporter,
+        )
+        PostService.set_hidden_state(hidden_reply, self.admin, True)
+
+        self.discussion.refresh_from_db()
+        self.reporter.refresh_from_db()
+        self.assertEqual(self.discussion.comment_count, 2)
+        self.assertEqual(self.reporter.comment_count, 0)
+
+        PostService.delete_post(hidden_reply.id, self.admin)
+
+        self.discussion.refresh_from_db()
+        self.reporter.refresh_from_db()
+        self.assertEqual(self.discussion.comment_count, 2)
+        self.assertEqual(self.reporter.comment_count, 0)
 
     def test_owner_without_edit_own_permission_cannot_edit_reply(self):
         member_group = Group.objects.create(name="ReplyAuthorNoEdit", color="#4d698e")

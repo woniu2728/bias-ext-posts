@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from django.db import transaction
-from django.db.models import F
 from django.utils import timezone
 
 from bias_core.extensions.platform import dispatch_forum_event_after_commit
@@ -49,13 +48,15 @@ def approve_post(
 
         discussion = post.discussion
         if not was_counted:
-            updates = {"comment_count": F("comment_count") + 1}
-            if not discussion.last_post_number or post.number >= discussion.last_post_number:
-                updates["last_posted_at"] = now
-                updates["last_posted_user"] = post.user
-                updates["last_post_id"] = post.id
-                updates["last_post_number"] = post.number
-            type(discussion).objects.filter(id=discussion.id).update(**updates)
+            refresh_discussion_approved_stats_cb(discussion)
+            discussion.refresh_from_db(fields=[
+                "comment_count",
+                "participant_count",
+                "last_posted_at",
+                "last_posted_user",
+                "last_post_id",
+                "last_post_number",
+            ])
 
             if post.user and post.type in user_counted_post_types:
                 increment_runtime_user_comment_count(post.user_id, 1)
@@ -72,6 +73,8 @@ def approve_post(
                     "content": post.content,
                     "actor": admin_user,
                     "previous_status": previous_status,
+                    "was_counted": was_counted,
+                    "is_counted": True,
                 },
             )
 
@@ -129,8 +132,27 @@ def reject_post(
 
         if was_counted:
             refresh_discussion_approved_stats_cb(post.discussion)
+            post.discussion.refresh_from_db(fields=[
+                "comment_count",
+                "participant_count",
+                "last_posted_at",
+                "last_posted_user",
+                "last_post_id",
+                "last_post_number",
+            ])
             if post.user and post.type in user_counted_post_types:
                 increment_runtime_user_comment_count(post.user_id, -1)
+
+        _apply_post_rejected_extensions(
+            post,
+            context={
+                "actor": admin_user,
+                "previous_status": previous_status,
+                "is_hidden": True,
+                "was_counted": was_counted,
+                "is_counted": False,
+            },
+        )
 
         if previous_status != Post.APPROVAL_REJECTED:
             dispatch_forum_event_after_commit(
@@ -146,4 +168,11 @@ def reject_post(
                 )
             )
     return post
+
+
+def _apply_post_rejected_extensions(post: Post, *, context: dict) -> dict:
+    post_lifecycle = get_runtime_post_lifecycle_service()
+    if post_lifecycle is None:
+        return {}
+    return post_lifecycle.apply_hidden(post=post, context=context)
 

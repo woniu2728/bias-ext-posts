@@ -390,6 +390,7 @@ def _approved_reply_counts_by_author(discussion, *, user_counted_post_types) -> 
 
 
 def _approved_discussion_stats(discussion, *, discussion_counted_post_types) -> dict:
+    from django.db.models import Count
     from bias_ext_posts.backend.models import Post
 
     approved_posts = Post.objects.filter(
@@ -400,10 +401,18 @@ def _approved_discussion_stats(discussion, *, discussion_counted_post_types) -> 
     ).order_by("number")
 
     approved_count = approved_posts.count()
+    participant_count = (
+        approved_posts.exclude(user_id__isnull=True)
+        .values("user_id")
+        .distinct()
+        .aggregate(total=Count("user_id"))["total"]
+        or 0
+    )
     last_post = approved_posts.order_by("-number").select_related("user").first()
     if last_post is None:
         return {
             "comment_count": approved_count,
+            "participant_count": participant_count,
             "last_post_id": None,
             "last_post_number": None,
             "last_posted_at": None,
@@ -411,6 +420,7 @@ def _approved_discussion_stats(discussion, *, discussion_counted_post_types) -> 
         }
     return {
         "comment_count": approved_count,
+        "participant_count": participant_count,
         "last_post_id": last_post.id,
         "last_post_number": last_post.number,
         "last_posted_at": last_post.created_at,

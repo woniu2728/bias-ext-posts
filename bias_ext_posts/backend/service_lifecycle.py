@@ -261,6 +261,7 @@ def delete_post(
         deleted_discussion_id = post.discussion_id
         counted_post = (
             post.approval_status == Post.APPROVAL_APPROVED
+            and post.hidden_at is None
             and post.type in discussion_counted_post_types
         )
         prepared_extensions = _prepare_post_delete_extensions(
@@ -276,6 +277,23 @@ def delete_post(
 
         post.delete()
 
+        if counted_post:
+            refresh_discussion_approved_stats_cb(discussion)
+            discussion.refresh_from_db(fields=[
+                "comment_count",
+                "participant_count",
+                "last_posted_at",
+                "last_posted_user",
+                "last_post_id",
+                "last_post_number",
+            ])
+            clamp_runtime_discussion_read_states(
+                discussion_id=discussion.id,
+                last_post_number=discussion.last_post_number,
+            )
+            if post.user and post.type in user_counted_post_types:
+                increment_runtime_user_comment_count(post.user_id, -1)
+
         _apply_post_deleted_extensions(
             context={
                 "post_id": deleted_post_id,
@@ -286,15 +304,6 @@ def delete_post(
                 "prepared": prepared_extensions,
             },
         )
-
-        if counted_post:
-            refresh_discussion_approved_stats_cb(discussion)
-            clamp_runtime_discussion_read_states(
-                discussion_id=discussion.id,
-                last_post_number=discussion.last_post_number,
-            )
-            if post.user and post.type in user_counted_post_types:
-                increment_runtime_user_comment_count(post.user_id, -1)
 
         dispatch_forum_event_after_commit(
             PostDeletedEvent(
