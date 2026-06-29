@@ -119,40 +119,59 @@ def get_post_window(
     if mode_count > 1:
         raise ValueError("near、before、after 只能传一个")
 
+    page_limit = max(1, int(limit or 20))
+    fetch_limit = page_limit + 1
+    has_previous = False
+    has_more = False
+
     if near is not None:
-        posts = list(queryset.filter(number__gte=near).order_by("number")[:limit])
+        posts = list(queryset.filter(number__gte=near).order_by("number")[:fetch_limit])
+        has_more = len(posts) > page_limit
+        posts = posts[:page_limit]
         if not posts:
-            posts = list(queryset.order_by("-number")[:limit])
+            posts = list(queryset.order_by("-number")[:page_limit])
             posts.reverse()
+            has_previous = total > len(posts)
+        else:
+            has_previous = queryset.filter(number__lt=posts[0].number).exists()
         current_start = posts[0].number if posts else 0
         current_end = posts[-1].number if posts else 0
     elif before is not None:
-        posts = list(queryset.filter(number__lt=before).order_by("-number")[:limit])
+        posts = list(queryset.filter(number__lt=before).order_by("-number")[:fetch_limit])
+        has_previous = len(posts) > page_limit
+        posts = posts[:page_limit]
         posts.reverse()
         current_start = posts[0].number if posts else 0
         current_end = posts[-1].number if posts else 0
+        if posts:
+            has_more = queryset.filter(number__gt=current_end).exists()
     elif after is not None:
-        posts = list(queryset.filter(number__gt=after).order_by("number")[:limit])
+        posts = list(queryset.filter(number__gt=after).order_by("number")[:fetch_limit])
+        has_more = len(posts) > page_limit
+        posts = posts[:page_limit]
         current_start = posts[0].number if posts else 0
         current_end = posts[-1].number if posts else 0
+        if posts:
+            has_previous = queryset.filter(number__lt=current_start).exists()
     else:
-        offset = (page - 1) * limit
-        posts = list(queryset[offset:offset + limit])
+        offset = (page - 1) * page_limit
+        posts = list(queryset[offset:offset + fetch_limit])
+        has_more = len(posts) > page_limit
+        posts = posts[:page_limit]
+        has_previous = offset > 0 and bool(posts)
         current_start = posts[0].number if posts else 0
         current_end = posts[-1].number if posts else 0
 
-    has_previous = queryset.filter(number__lt=current_start).exists() if current_start else False
-    has_more = queryset.filter(number__gt=current_end).exists() if current_end else False
     resolved_page = page
-    if current_end:
+    if current_end and (near is not None or before is not None or after is not None):
         resolved_position = queryset.filter(number__lte=current_end).count()
-        resolved_page = max(1, ceil(resolved_position / limit))
+        resolved_page = max(1, ceil(resolved_position / page_limit))
 
     return PostStreamWindow(
         posts=posts,
         total=total,
         page=resolved_page,
-        limit=limit,
+        limit=page_limit,
         current_start=current_start,
         current_end=current_end,
         has_previous=has_previous,

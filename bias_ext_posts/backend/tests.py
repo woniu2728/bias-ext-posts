@@ -569,6 +569,63 @@ class PostPaginationTests(ExtensionRuntimeTestMixin, TestCase):
         self.assertEqual(after_window.current_start, 26)
         self.assertEqual(after_window.current_end, 30)
 
+    def test_get_post_window_default_page_uses_bounded_queries(self):
+        discussion = create_runtime_discussion(
+            title="Window query budget",
+            content="First post",
+            user=self.user,
+        )
+        for index in range(2, 12):
+            PostService.create_post(
+                discussion_id=discussion.id,
+                content=f"Reply {index}",
+                user=self.user,
+            )
+
+        with CaptureQueriesContext(connection) as queries:
+            window = PostService.get_post_window(
+                discussion_id=discussion.id,
+                limit=5,
+                page=1,
+                user=self.user,
+            )
+
+        self.assertEqual([post.number for post in window.posts], [1, 2, 3, 4, 5])
+        self.assertFalse(window.has_previous)
+        self.assertTrue(window.has_more)
+        self.assertEqual(window.page, 1)
+        self.assertLessEqual(len(queries), 3)
+
+    def test_post_window_fallback_uses_bounded_queries_without_content_service(self):
+        discussion = create_runtime_discussion(
+            title="Fallback window query budget",
+            content="First post",
+            user=self.user,
+        )
+        for index in range(2, 12):
+            PostService.create_post(
+                discussion_id=discussion.id,
+                content=f"Reply {index}",
+                user=self.user,
+            )
+
+        with patch(
+            "bias_ext_posts.backend.post_query_service.get_runtime_content_posts_service",
+            return_value=None,
+        ), CaptureQueriesContext(connection) as queries:
+            window = PostService.get_post_window(
+                discussion_id=discussion.id,
+                limit=5,
+                page=1,
+                user=self.user,
+            )
+
+        self.assertEqual([post.number for post in window.posts], [1, 2, 3, 4, 5])
+        self.assertFalse(window.has_previous)
+        self.assertTrue(window.has_more)
+        self.assertEqual(window.page, 1)
+        self.assertLessEqual(len(queries), 3)
+
     def test_create_post_retries_on_transient_sqlite_lock(self):
         discussion = create_runtime_discussion(
             title="Retry post discussion",
