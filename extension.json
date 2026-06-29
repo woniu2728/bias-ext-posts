@@ -16,7 +16,8 @@
     "discussions"
   ],
   "provides": [
-    "posts",
+    "post-api",
+    "post-ui",
     "post_lifecycle"
   ],
   "django": {

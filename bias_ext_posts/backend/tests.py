@@ -91,6 +91,7 @@ class PostsExtensionDiagnosticsTests(ExtensionRuntimeTestMixin, TestCase):
         realtime_post_payload = application.get_service("realtime.post_payload")
         runtime_view = application.get_runtime_extension("posts")
 
+        self.assertEqual(runtime_view.capabilities, ("post-api", "post-ui", "post_lifecycle"))
         self.assertIn("posts.service", application.get_service_provider_keys(extension_id="posts"))
         self.assertIn("discussion.posts", application.get_service_provider_keys(extension_id="posts"))
         self.assertIn("realtime.post_payload", application.get_service_provider_keys(extension_id="posts"))
