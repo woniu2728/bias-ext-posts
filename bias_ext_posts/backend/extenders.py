@@ -26,6 +26,7 @@ from bias_ext_posts.backend.resources import (
     admin_stats_resource_field_definitions,
     post_resource_definitions,
     post_resource_field_definitions,
+    post_resource_relationship_definitions,
 )
 from bias_ext_posts.backend.runtime import (
     discussion_posts_service_provider,
@@ -89,7 +90,8 @@ def resource_extenders():
     return (
         ApiResourceExtender("post")
         .endpoints_with(*post_resource_endpoints())
-        .fields(post_resource_field_definitions),
+        .fields(post_resource_field_definitions)
+        .relationships(post_resource_relationship_definitions),
         ApiResourceExtender("admin_stats").fields(admin_stats_resource_field_definitions),
         *(ApiResourceExtender(definition) for definition in post_resource_definitions()),
     )

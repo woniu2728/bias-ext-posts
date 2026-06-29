@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from bias_core.extensions import ResourceDefinition, ResourceFieldDefinition
+from bias_core.extensions import ResourceDefinition, ResourceFieldDefinition, ResourceRelationshipDefinition
 
 
 def post_resource_definitions():
@@ -71,6 +71,20 @@ def post_resource_field_definitions():
     )
 
 
+def post_resource_relationship_definitions():
+    return (
+        ResourceRelationshipDefinition(
+            resource="post",
+            relationship="discussion",
+            module_id="posts",
+            resolver=resolve_post_discussion,
+            description="帖子所属讨论资源。",
+            select_related=("discussion",),
+            resource_type="discussion",
+        ),
+    )
+
+
 def admin_stats_resource_field_definitions():
     return (
         ResourceFieldDefinition(
@@ -81,6 +95,10 @@ def admin_stats_resource_field_definitions():
             description="后台统计中的帖子总数。",
         ),
     )
+
+
+def resolve_post_discussion(post, context: dict):
+    return getattr(post, "discussion", None)
 
 
 def resolve_admin_total_posts(stats, context: dict) -> int:

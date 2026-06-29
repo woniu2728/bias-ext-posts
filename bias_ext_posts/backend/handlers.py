@@ -30,9 +30,19 @@ def get_stream_post_types():
 
 def serialize_post(post, user=None, resource_options=None, default_includes=(), resource_context=None):
     resource_options = resource_options or ResourceQueryOptions()
-    resolved_context = {"user": user}
+    includes = merge_resource_includes(("user", "edited_user"), default_includes, resource_options.includes)
+    resolved_context = {
+        "user": user,
+        "include": includes,
+        "plain_related_fields": {
+            "discussion": ("id", "title", "slug"),
+        },
+    }
     if resource_context:
+        related_fields = dict(resolved_context["plain_related_fields"])
+        related_fields.update(resource_context.get("plain_related_fields") or {})
         resolved_context.update(resource_context)
+        resolved_context["plain_related_fields"] = related_fields
     response = {
         "id": post.id,
         "discussion_id": post.discussion_id,
@@ -58,7 +68,7 @@ def serialize_post(post, user=None, resource_options=None, default_includes=(), 
             post,
             resolved_context,
             only=resource_options.fields,
-            include=merge_resource_includes(("user", "edited_user"), default_includes, resource_options.includes),
+            include=includes,
         )
     )
     return response
@@ -66,12 +76,13 @@ def serialize_post(post, user=None, resource_options=None, default_includes=(), 
 
 def apply_post_resource_preloads(queryset, user=None, resource_options=None, default_includes=()):
     resource_options = resource_options or ResourceQueryOptions()
+    includes = merge_resource_includes(("user", "edited_user"), default_includes, resource_options.includes)
     return get_resource_registry().apply_preload_plan(
         queryset,
         "post",
-        {"user": user},
+        {"user": user, "include": includes},
         only=resource_options.fields,
-        include=merge_resource_includes(("user", "edited_user"), default_includes, resource_options.includes),
+        include=includes,
     )
 
 
