@@ -318,6 +318,9 @@ class PostsExtensionDiagnosticsTests(ExtensionRuntimeTestMixin, TestCase):
             "approved_reply_counts_by_author": Mock(return_value={1: 2}),
             "approved_discussion_stats": Mock(return_value={"comment_count": 3}),
             "delete_discussion_posts": Mock(return_value=({"id": 1},)),
+            "get_latest_event_post": Mock(return_value="latest-event"),
+            "update_event_post_content": Mock(return_value="updated-event"),
+            "delete_event_post": Mock(return_value=True),
         }
 
         with patch(
@@ -384,6 +387,12 @@ class PostsExtensionDiagnosticsTests(ExtensionRuntimeTestMixin, TestCase):
                 {"comment_count": 3},
             )
             self.assertEqual(runtime._delete_discussion_posts(discussion), ({"id": 1},))
+            self.assertEqual(runtime._get_latest_event_post(discussion=discussion, post_type="discussionTagged"), "latest-event")
+            self.assertEqual(
+                runtime._update_event_post_content("post", content="merged", content_html="<p>merged</p>"),
+                "updated-event",
+            )
+            self.assertTrue(runtime._delete_event_post("post"))
 
         content_service["create_first_post"].assert_called_once_with(
             discussion=discussion,
@@ -424,6 +433,16 @@ class PostsExtensionDiagnosticsTests(ExtensionRuntimeTestMixin, TestCase):
             discussion_counted_post_types=("comment",),
         )
         content_service["delete_discussion_posts"].assert_called_once_with(discussion)
+        content_service["get_latest_event_post"].assert_called_once_with(
+            discussion=discussion,
+            post_type="discussionTagged",
+        )
+        content_service["update_event_post_content"].assert_called_once_with(
+            "post",
+            content="merged",
+            content_html="<p>merged</p>",
+        )
+        content_service["delete_event_post"].assert_called_once_with("post")
 
     def test_inspect_reports_posts_wrapper_no_longer_owns_models(self):
         stdout = StringIO()

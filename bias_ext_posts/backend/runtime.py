@@ -231,6 +231,9 @@ def discussion_posts_service_provider() -> dict:
         "delete_discussion_posts": _delete_discussion_posts,
         "get_post_number": _get_post_number,
         "resolve_content_html": _resolve_post_content_html,
+        "get_latest_event_post": _get_latest_event_post,
+        "update_event_post_content": _update_event_post_content,
+        "delete_event_post": _delete_event_post,
     }
 
 
@@ -264,6 +267,44 @@ def _create_event_post(
         approved_at=approved_at or timezone.now(),
         approved_by=actor,
     )
+
+
+def _get_latest_event_post(*, discussion, post_type: str):
+    content_method = _content_posts_method("get_latest_event_post")
+    if content_method is not None:
+        return content_method(discussion=discussion, post_type=post_type)
+
+    from bias_ext_posts.backend.models import Post
+
+    return (
+        Post.objects
+        .filter(discussion_id=getattr(discussion, "id", discussion), type=str(post_type or "").strip())
+        .order_by("-number")
+        .first()
+    )
+
+
+def _update_event_post_content(post, *, content: str, content_html: str = ""):
+    content_method = _content_posts_method("update_event_post_content")
+    if content_method is not None:
+        return content_method(post, content=content, content_html=content_html)
+
+    from django.utils import timezone
+
+    post.content = content
+    post.content_html = content_html
+    post.updated_at = timezone.now()
+    post.save(update_fields=["content", "content_html", "updated_at"])
+    return post
+
+
+def _delete_event_post(post) -> bool:
+    content_method = _content_posts_method("delete_event_post")
+    if content_method is not None:
+        return bool(content_method(post))
+
+    post.delete()
+    return True
 
 
 def _create_first_post(
