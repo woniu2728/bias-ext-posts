@@ -228,6 +228,34 @@ class PostsExtensionDiagnosticsTests(ExtensionRuntimeTestMixin, TestCase):
         self.assertEqual(payload["number"], 1)
         self.assertEqual(payload["content"], "Post resource content")
 
+    def test_runtime_post_serialization_delegates_to_content_foundation(self):
+        application = self.bootstrap_extensions("posts")
+        service = application.get_service("posts.service")
+        author = User.objects.create_user(
+            username="content-post-serializer",
+            email="content-post-serializer@example.com",
+            password="password123",
+            is_email_confirmed=True,
+        )
+        trusted_group = Group.objects.create(name="ContentPostSerializer", color="#4d698e")
+        Permission.objects.create(group=trusted_group, permission="startDiscussion")
+        author.user_groups.add(trusted_group)
+        discussion = create_runtime_discussion(
+            title="Content serializer discussion",
+            content="Content serializer body",
+            user=author,
+        )
+
+        with patch(
+            "bias_ext_posts.backend.handlers.serialize_post",
+            side_effect=AssertionError("posts runtime serialization should use content"),
+        ):
+            payload = service["serialize_by_id"](discussion.first_post_id, user=author)
+
+        self.assertEqual(payload["id"], discussion.first_post_id)
+        self.assertEqual(payload["discussion_id"], discussion.id)
+        self.assertEqual(payload["content"], "Content serializer body")
+
     def test_inspect_reports_posts_wrapper_no_longer_owns_models(self):
         stdout = StringIO()
         call_command(

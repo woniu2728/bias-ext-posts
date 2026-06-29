@@ -441,12 +441,30 @@ def _delete_discussion_posts(discussion) -> tuple[dict, ...]:
 
 
 def _serialize_post(post, user=None, **kwargs):
+    from bias_core.extensions.runtime import get_runtime_content_posts_service
+
+    content_posts = get_runtime_content_posts_service(None)
+    if content_posts is not None:
+        method = content_posts.get("serialize") if isinstance(content_posts, dict) else getattr(content_posts, "serialize", None)
+        if callable(method):
+            return method(post, user=user, **kwargs)
     from bias_ext_posts.backend.handlers import serialize_post
 
     return serialize_post(post, user, **kwargs)
 
 
 def _serialize_post_by_id(post_id: int, user=None, **kwargs):
+    from bias_core.extensions.runtime import get_runtime_content_posts_service
+
+    content_posts = get_runtime_content_posts_service(None)
+    if content_posts is not None:
+        method = content_posts.get("serialize_by_id") if isinstance(content_posts, dict) else getattr(
+            content_posts,
+            "serialize_by_id",
+            None,
+        )
+        if callable(method):
+            return method(post_id, user=user, **kwargs)
     from bias_ext_posts.backend.handlers import apply_post_resource_preloads, serialize_post
     from bias_ext_posts.backend.models import Post
 
