@@ -3,9 +3,14 @@ from math import ceil
 from typing import Any, List, Optional
 
 from bias_core.extensions.platform import apply_model_visibility_scope, can_view_model_instance
-from bias_core.extensions.runtime import get_runtime_content_posts_service
 from bias_ext_posts.backend.content_models import get_post_model
 from bias_ext_posts.backend.models import Post
+
+
+def get_runtime_content_posts_service(*args, **kwargs):
+    from bias_core.extensions.runtime import get_runtime_content_posts_service as runtime_get_content_posts_service
+
+    return runtime_get_content_posts_service(*args, **kwargs)
 
 
 @dataclass

@@ -7,18 +7,6 @@ from django.db.models import F
 from django.utils import timezone
 
 from bias_core.extensions.platform import dispatch_forum_event_after_commit
-from bias_core.extensions.runtime import (
-    ensure_runtime_forum_permission,
-    ensure_runtime_user_email_confirmed,
-    ensure_runtime_user_not_suspended,
-    get_runtime_post_lifecycle_service,
-    get_runtime_content_posts_service,
-    increment_runtime_user_comment_count,
-    clamp_runtime_discussion_read_states,
-    mark_runtime_discussion_read,
-    refresh_runtime_model_private,
-    requires_runtime_content_approval,
-)
 from bias_ext_posts.backend.events import (
     PostCreatedEvent,
     PostDeletedEvent,
@@ -27,6 +15,66 @@ from bias_ext_posts.backend.events import (
 )
 from bias_ext_posts.backend.content_models import get_post_model
 from bias_ext_posts.backend.models import Post
+
+
+def ensure_runtime_forum_permission(*args, **kwargs):
+    from bias_core.extensions.runtime import ensure_runtime_forum_permission as runtime_ensure_forum_permission
+
+    return runtime_ensure_forum_permission(*args, **kwargs)
+
+
+def ensure_runtime_user_email_confirmed(*args, **kwargs):
+    from bias_core.extensions.runtime import ensure_runtime_user_email_confirmed as runtime_ensure_user_email_confirmed
+
+    return runtime_ensure_user_email_confirmed(*args, **kwargs)
+
+
+def ensure_runtime_user_not_suspended(*args, **kwargs):
+    from bias_core.extensions.runtime import ensure_runtime_user_not_suspended as runtime_ensure_user_not_suspended
+
+    return runtime_ensure_user_not_suspended(*args, **kwargs)
+
+
+def get_runtime_post_lifecycle_service(*args, **kwargs):
+    from bias_core.extensions.runtime import get_runtime_post_lifecycle_service as runtime_get_post_lifecycle_service
+
+    return runtime_get_post_lifecycle_service(*args, **kwargs)
+
+
+def get_runtime_content_posts_service(*args, **kwargs):
+    from bias_core.extensions.runtime import get_runtime_content_posts_service as runtime_get_content_posts_service
+
+    return runtime_get_content_posts_service(*args, **kwargs)
+
+
+def increment_runtime_user_comment_count(*args, **kwargs):
+    from bias_core.extensions.runtime import increment_runtime_user_comment_count as runtime_increment_user_comment_count
+
+    return runtime_increment_user_comment_count(*args, **kwargs)
+
+
+def clamp_runtime_discussion_read_states(*args, **kwargs):
+    from bias_core.extensions.runtime import clamp_runtime_discussion_read_states as runtime_clamp_discussion_read_states
+
+    return runtime_clamp_discussion_read_states(*args, **kwargs)
+
+
+def mark_runtime_discussion_read(*args, **kwargs):
+    from bias_core.extensions.runtime import mark_runtime_discussion_read as runtime_mark_discussion_read
+
+    return runtime_mark_discussion_read(*args, **kwargs)
+
+
+def refresh_runtime_model_private(*args, **kwargs):
+    from bias_core.extensions.runtime import refresh_runtime_model_private as runtime_refresh_model_private
+
+    return runtime_refresh_model_private(*args, **kwargs)
+
+
+def requires_runtime_content_approval(*args, **kwargs):
+    from bias_core.extensions.runtime import requires_runtime_content_approval as runtime_requires_content_approval
+
+    return runtime_requires_content_approval(*args, **kwargs)
 
 
 def create_post(

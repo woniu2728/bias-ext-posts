@@ -4,17 +4,35 @@ from django.db import transaction
 from django.utils import timezone
 
 from bias_core.extensions.platform import dispatch_forum_event_after_commit
-from bias_core.extensions.runtime import (
-    get_runtime_post_lifecycle_service,
-    increment_runtime_user_comment_count,
-    mark_runtime_discussion_read,
-    refresh_runtime_model_private,
-)
 from bias_ext_posts.backend.events import (
     PostApprovedEvent,
     PostRejectedEvent,
 )
 from bias_ext_posts.backend.models import Post
+
+
+def get_runtime_post_lifecycle_service(*args, **kwargs):
+    from bias_core.extensions.runtime import get_runtime_post_lifecycle_service as runtime_get_post_lifecycle_service
+
+    return runtime_get_post_lifecycle_service(*args, **kwargs)
+
+
+def increment_runtime_user_comment_count(*args, **kwargs):
+    from bias_core.extensions.runtime import increment_runtime_user_comment_count as runtime_increment_user_comment_count
+
+    return runtime_increment_user_comment_count(*args, **kwargs)
+
+
+def mark_runtime_discussion_read(*args, **kwargs):
+    from bias_core.extensions.runtime import mark_runtime_discussion_read as runtime_mark_discussion_read
+
+    return runtime_mark_discussion_read(*args, **kwargs)
+
+
+def refresh_runtime_model_private(*args, **kwargs):
+    from bias_core.extensions.runtime import refresh_runtime_model_private as runtime_refresh_model_private
+
+    return runtime_refresh_model_private(*args, **kwargs)
 
 
 def approve_post(

@@ -3,15 +3,43 @@ from __future__ import annotations
 from django.db.models import Q, Subquery
 
 from bias_core.extensions.platform import apply_model_visibility_scope
-from bias_core.extensions.runtime import (
-    apply_runtime_model_visibility,
-    can_view_runtime_model_private,
-    get_runtime_visible_discussion_ids,
-    has_runtime_discussion_visibility,
-    has_runtime_forum_permission,
-    has_runtime_model_visibility,
-)
 from bias_ext_posts.backend.models import Post
+
+
+def apply_runtime_model_visibility(*args, **kwargs):
+    from bias_core.extensions.runtime import apply_runtime_model_visibility as runtime_apply_model_visibility
+
+    return runtime_apply_model_visibility(*args, **kwargs)
+
+
+def can_view_runtime_model_private(*args, **kwargs):
+    from bias_core.extensions.runtime import can_view_runtime_model_private as runtime_can_view_model_private
+
+    return runtime_can_view_model_private(*args, **kwargs)
+
+
+def get_runtime_visible_discussion_ids(*args, **kwargs):
+    from bias_core.extensions.runtime import get_runtime_visible_discussion_ids as runtime_get_visible_discussion_ids
+
+    return runtime_get_visible_discussion_ids(*args, **kwargs)
+
+
+def has_runtime_discussion_visibility(*args, **kwargs):
+    from bias_core.extensions.runtime import has_runtime_discussion_visibility as runtime_has_discussion_visibility
+
+    return runtime_has_discussion_visibility(*args, **kwargs)
+
+
+def has_runtime_forum_permission(*args, **kwargs):
+    from bias_core.extensions.runtime import has_runtime_forum_permission as runtime_has_forum_permission
+
+    return runtime_has_forum_permission(*args, **kwargs)
+
+
+def has_runtime_model_visibility(*args, **kwargs):
+    from bias_core.extensions.runtime import has_runtime_model_visibility as runtime_has_model_visibility
+
+    return runtime_has_model_visibility(*args, **kwargs)
 
 
 def _field(prefix: str, name: str) -> str:

@@ -10,7 +10,6 @@ from bias_core.extensions.platform import (
     parse_resource_query_options,
 )
 from bias_core.extensions.platform import log_admin_action
-from bias_core.extensions.runtime import get_runtime_resource_registry
 from bias_core.extensions.platform import get_forum_registry
 from bias_core.extensions.platform import BadJsonApiRequest
 from bias_core.extensions import ResourceEndpointDefinition
@@ -18,6 +17,12 @@ from bias_ext_posts.backend.content_models import get_post_model
 from bias_ext_posts.backend.models import Post
 from bias_ext_posts.backend.schemas import PostCreateSchema, PostUpdateSchema
 from bias_ext_posts.backend.services import PostService
+
+
+def get_runtime_resource_registry(*args, **kwargs):
+    from bias_core.extensions.runtime import get_runtime_resource_registry as runtime_get_resource_registry
+
+    return runtime_get_resource_registry(*args, **kwargs)
 
 
 def get_resource_registry():

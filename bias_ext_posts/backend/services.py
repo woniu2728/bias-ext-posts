@@ -10,18 +10,39 @@ from django.utils import timezone
 from bias_core.extensions.platform import get_extension_settings, sqlite_write_retry
 from bias_core.extensions.platform import get_forum_event_bus
 from bias_core.extensions.platform import evaluate_extension_policy
-from bias_core.extensions.runtime import (
-    get_runtime_content_posts_service,
-    lock_runtime_discussion_for_post_number,
-    refresh_runtime_discussion_approved_stats,
-    validate_runtime_replyable_discussion,
-)
 from bias_core.extensions.platform import get_forum_registry
 from bias_ext_posts.backend import post_query_service, service_lifecycle, service_moderation
 from bias_ext_posts.backend.models import Post
-from bias_core.extensions.runtime import (
-    has_runtime_forum_permission,
-)
+
+
+def get_runtime_content_posts_service(*args, **kwargs):
+    from bias_core.extensions.runtime import get_runtime_content_posts_service as runtime_get_content_posts_service
+
+    return runtime_get_content_posts_service(*args, **kwargs)
+
+
+def lock_runtime_discussion_for_post_number(*args, **kwargs):
+    from bias_core.extensions.runtime import lock_runtime_discussion_for_post_number as runtime_lock_discussion_for_post_number
+
+    return runtime_lock_discussion_for_post_number(*args, **kwargs)
+
+
+def refresh_runtime_discussion_approved_stats(*args, **kwargs):
+    from bias_core.extensions.runtime import refresh_runtime_discussion_approved_stats as runtime_refresh_discussion_approved_stats
+
+    return runtime_refresh_discussion_approved_stats(*args, **kwargs)
+
+
+def validate_runtime_replyable_discussion(*args, **kwargs):
+    from bias_core.extensions.runtime import validate_runtime_replyable_discussion as runtime_validate_replyable_discussion
+
+    return runtime_validate_replyable_discussion(*args, **kwargs)
+
+
+def has_runtime_forum_permission(*args, **kwargs):
+    from bias_core.extensions.runtime import has_runtime_forum_permission as runtime_has_forum_permission
+
+    return runtime_has_forum_permission(*args, **kwargs)
 
 
 def _get_forum_registry():

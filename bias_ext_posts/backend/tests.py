@@ -13,13 +13,6 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from bias_content.backend import runtime as content_runtime
-from bias_core.extensions.runtime import (
-    create_runtime_discussion,
-    delete_runtime_discussion,
-    get_runtime_discussion_model,
-    get_runtime_discussion_state_model,
-    set_runtime_discussion_hidden_state,
-)
 from bias_core.extensions.platform import apply_model_visibility_scope
 from bias_core.extensions import ResourceDefinition, ResourceEndpointDefinition, ResourceRelationshipDefinition
 from bias_core.extensions.testing import (
@@ -42,11 +35,44 @@ from bias_ext_posts.backend.resources import resolve_post_event_data
 from bias_ext_posts.backend.handlers import post_resource_endpoints
 from bias_ext_posts.backend.models import Post
 from bias_ext_posts.backend.services import PostService
-from bias_core.extensions.runtime import (
-    get_runtime_group_model,
-    get_runtime_permission_model,
-    get_runtime_user_model,
-)
+
+
+def _runtime_facade(name: str):
+    from importlib import import_module
+
+    return getattr(import_module("bias_core.extensions.runtime"), name)
+
+
+def create_runtime_discussion(*args, **kwargs):
+    return _runtime_facade("create_runtime_discussion")(*args, **kwargs)
+
+
+def delete_runtime_discussion(*args, **kwargs):
+    return _runtime_facade("delete_runtime_discussion")(*args, **kwargs)
+
+
+def get_runtime_discussion_model(*args, **kwargs):
+    return _runtime_facade("get_runtime_discussion_model")(*args, **kwargs)
+
+
+def get_runtime_discussion_state_model(*args, **kwargs):
+    return _runtime_facade("get_runtime_discussion_state_model")(*args, **kwargs)
+
+
+def set_runtime_discussion_hidden_state(*args, **kwargs):
+    return _runtime_facade("set_runtime_discussion_hidden_state")(*args, **kwargs)
+
+
+def get_runtime_group_model(*args, **kwargs):
+    return _runtime_facade("get_runtime_group_model")(*args, **kwargs)
+
+
+def get_runtime_permission_model(*args, **kwargs):
+    return _runtime_facade("get_runtime_permission_model")(*args, **kwargs)
+
+
+def get_runtime_user_model(*args, **kwargs):
+    return _runtime_facade("get_runtime_user_model")(*args, **kwargs)
 
 
 class RuntimeModelProxy:
