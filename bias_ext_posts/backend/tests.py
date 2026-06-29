@@ -83,23 +83,6 @@ def scope_test_post_view(queryset, context):
     return (visible_queryset | private_queryset).distinct()
 
 
-def make_test_discussions_service(discussion_model, model_service):
-    def get_visible_ids(user=None, *, ability="view", context=None):
-        return apply_model_visibility_scope(
-            discussion_model,
-            discussion_model.objects.all(),
-            user=user,
-            ability=ability,
-            context=context or {},
-        ).values("id")
-
-    return {
-        "model": discussion_model,
-        "get_visible_ids": get_visible_ids,
-        "has_visibility": lambda *, ability=None: model_service.has_visibility(discussion_model, ability=ability),
-    }
-
-
 class PostsExtensionDiagnosticsTests(ExtensionRuntimeTestMixin, TestCase):
     def test_posts_extension_registers_runtime_service_provider(self):
         application = self.bootstrap_extensions("posts")
@@ -728,12 +711,10 @@ class PostPaginationTests(ExtensionRuntimeTestMixin, TestCase):
                 scope=lambda queryset, context: queryset.filter(id=allowed.id),
             ),
         )
-        app.register_service("discussions.service", make_test_discussions_service(discussion_model, app.models))
-
         with patch("bias_core.extensions.runtime_models.get_runtime_model_service", return_value=app.models), patch(
             "bias_ext_posts.backend.visibility.get_runtime_discussion_model",
             create=True,
-            side_effect=AssertionError("posts visibility must use discussions runtime visible ids contract"),
+            side_effect=AssertionError("posts visibility must use content discussion visibility contract"),
         ), CaptureQueriesContext(connection) as queries:
             visible_ids = set(
                 PostService.apply_visibility_filters(
@@ -795,12 +776,10 @@ class PostPaginationTests(ExtensionRuntimeTestMixin, TestCase):
                 scope=lambda queryset, context: queryset.filter(id=allowed_discussion.id),
             ),
         )
-        app.register_service("discussions.service", make_test_discussions_service(discussion_model, app.models))
-
         with patch("bias_core.extensions.runtime_models.get_runtime_model_service", return_value=app.models), patch(
             "bias_ext_posts.backend.visibility.get_runtime_discussion_model",
             create=True,
-            side_effect=AssertionError("posts visibility must use discussions runtime visible ids contract"),
+            side_effect=AssertionError("posts visibility must use content discussion visibility contract"),
         ), patch(
             "bias_ext_posts.backend.visibility.has_runtime_forum_permission",
             return_value=False,

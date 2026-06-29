@@ -10,7 +10,9 @@
   "dependencies": [
     "core",
     "users",
-    "content",
+    "content"
+  ],
+  "optional_dependencies": [
     "discussions"
   ],
   "provides": [
