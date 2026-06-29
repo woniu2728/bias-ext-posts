@@ -13,6 +13,16 @@ def _runtime_service_method(service: Any, name: str):
     return method
 
 
+def _content_posts_method(name: str):
+    from bias_core.extensions.runtime import get_runtime_content_posts_service
+
+    content_posts = get_runtime_content_posts_service(None)
+    if content_posts is None:
+        return None
+    method = content_posts.get(name) if isinstance(content_posts, dict) else getattr(content_posts, name, None)
+    return method if callable(method) else None
+
+
 def post_service_provider() -> dict:
     from bias_ext_posts.backend import post_query_service
     from bias_ext_posts.backend.models import Post
@@ -151,6 +161,10 @@ def _serialize_user(user) -> dict | None:
 
 
 def _get_visible_post_ids(user=None, *, context: dict | None = None):
+    content_method = _content_posts_method("get_visible_ids")
+    if content_method is not None:
+        return content_method(user=user, context=context or {})
+
     from bias_ext_posts.backend.models import Post
     from bias_ext_posts.backend.post_query_service import apply_visibility_filters
 
@@ -170,6 +184,10 @@ def _get_visible_post_ids(user=None, *, context: dict | None = None):
 
 
 def _get_post_action_context(post_id: int, user=None, *, require_visible: bool = True) -> dict | None:
+    content_method = _content_posts_method("get_action_context")
+    if content_method is not None:
+        return content_method(post_id, user=user, require_visible=require_visible)
+
     from bias_ext_posts.backend.models import Post
     from bias_ext_posts.backend.post_query_service import apply_visibility_filters
 
@@ -482,12 +500,20 @@ def _serialize_post_by_id(post_id: int, user=None, **kwargs):
 
 
 def _resolve_post_content_html(post) -> str:
+    content_method = _content_posts_method("resolve_content_html")
+    if content_method is not None:
+        return str(content_method(post) or "")
+
     from bias_ext_posts.backend.services import PostService
 
     return PostService.resolve_content_html(post)
 
 
 def _reply_notification_context(reply_to_post_id: int, post_id: int, from_user):
+    content_method = _content_posts_method("reply_notification_context")
+    if content_method is not None:
+        return content_method(reply_to_post_id, post_id, from_user)
+
     from bias_ext_posts.backend.models import Post
 
     try:
@@ -518,6 +544,10 @@ def _reply_notification_context(reply_to_post_id: int, post_id: int, from_user):
 
 
 def _notification_context(post_id: int):
+    content_method = _content_posts_method("notification_context")
+    if content_method is not None:
+        return content_method(post_id)
+
     from bias_ext_posts.backend.models import Post
 
     try:
@@ -538,6 +568,10 @@ def _notification_context(post_id: int):
 
 
 def _get_post_number(post_id: int):
+    content_method = _content_posts_method("get_post_number")
+    if content_method is not None:
+        return content_method(post_id)
+
     from bias_ext_posts.backend.models import Post
 
     return Post.objects.filter(id=post_id).values_list("number", flat=True).first()

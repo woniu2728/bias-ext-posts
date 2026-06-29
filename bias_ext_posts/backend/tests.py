@@ -263,6 +263,45 @@ class PostsExtensionDiagnosticsTests(ExtensionRuntimeTestMixin, TestCase):
         self.assertEqual(payload["discussion_id"], discussion.id)
         self.assertEqual(payload["content"], "Content serializer body")
 
+    def test_runtime_post_read_helpers_delegate_to_content_foundation(self):
+        from bias_ext_posts.backend import runtime
+
+        content_service = {
+            "get_visible_ids": Mock(return_value="content-visible"),
+            "get_action_context": Mock(return_value={"id": 7}),
+            "resolve_content_html": Mock(return_value="<p>content</p>"),
+            "reply_notification_context": Mock(return_value={"reply": True}),
+            "notification_context": Mock(return_value={"post": True}),
+            "get_post_number": Mock(return_value=9),
+        }
+
+        with patch(
+            "bias_core.extensions.runtime.get_runtime_content_posts_service",
+            return_value=content_service,
+        ), patch(
+            "bias_ext_posts.backend.models.Post.objects",
+            side_effect=AssertionError("post runtime helper should delegate to content"),
+        ), patch(
+            "bias_ext_posts.backend.services.PostService.resolve_content_html",
+            side_effect=AssertionError("content_html should be resolved by content"),
+        ):
+            self.assertEqual(
+                runtime._get_visible_post_ids(user="reader", context={"ability": "view"}),
+                "content-visible",
+            )
+            self.assertEqual(runtime._get_post_action_context(7, user="reader"), {"id": 7})
+            self.assertEqual(runtime._resolve_post_content_html("post"), "<p>content</p>")
+            self.assertEqual(runtime._reply_notification_context(1, 2, "sender"), {"reply": True})
+            self.assertEqual(runtime._notification_context(2), {"post": True})
+            self.assertEqual(runtime._get_post_number(2), 9)
+
+        content_service["get_visible_ids"].assert_called_once_with(user="reader", context={"ability": "view"})
+        content_service["get_action_context"].assert_called_once_with(7, user="reader", require_visible=True)
+        content_service["resolve_content_html"].assert_called_once_with("post")
+        content_service["reply_notification_context"].assert_called_once_with(1, 2, "sender")
+        content_service["notification_context"].assert_called_once_with(2)
+        content_service["get_post_number"].assert_called_once_with(2)
+
     def test_inspect_reports_posts_wrapper_no_longer_owns_models(self):
         stdout = StringIO()
         call_command(
