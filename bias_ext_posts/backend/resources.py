@@ -132,10 +132,16 @@ def resolve_post_can_delete(post, context: dict) -> bool:
 
 
 def resolve_post_can_hide(post, context: dict) -> bool:
+    from django.core.exceptions import PermissionDenied
     from bias_ext_posts.backend.services import PostService
 
     user = context.get("user")
-    return bool(user and PostService.can_hide_post(post, user))
+    if not user:
+        return False
+    try:
+        return bool(PostService.can_hide_post(post, user))
+    except (PermissionDenied, ValueError):
+        return False
 
 
 def resolve_post_ip_address(post, context: dict) -> str | None:
