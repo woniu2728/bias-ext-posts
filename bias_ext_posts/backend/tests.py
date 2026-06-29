@@ -136,6 +136,13 @@ class PostsExtensionDiagnosticsTests(ExtensionRuntimeTestMixin, TestCase):
                 "posts.post.resubmitted",
             ],
         )
+        self.assertEqual(
+            {
+                getattr(event_type, "__module__", "")
+                for event_type in service["event_types"].values()
+            },
+            {"bias_content.backend.events"},
+        )
         for key in (
             "can_view",
             "get_by_id",
