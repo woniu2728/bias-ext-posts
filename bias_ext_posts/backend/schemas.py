@@ -3,7 +3,7 @@
 """
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class PostCreateSchema(BaseModel):
@@ -11,22 +11,24 @@ class PostCreateSchema(BaseModel):
     content: str = Field(..., min_length=1, description="帖子内容")
     reply_to_post_id: Optional[int] = Field(None, ge=1, description="被回复的帖子ID")
 
-    @validator('content')
-    def validate_content(cls, v):
-        if not v.strip():
+    @field_validator("content")
+    @classmethod
+    def validate_content(cls, value):
+        if not value.strip():
             raise ValueError('内容不能为空')
-        return v.strip()
+        return value.strip()
 
 
 class PostUpdateSchema(BaseModel):
     """更新帖子"""
     content: str = Field(..., min_length=1, description="帖子内容")
 
-    @validator('content')
-    def validate_content(cls, v):
-        if not v.strip():
+    @field_validator("content")
+    @classmethod
+    def validate_content(cls, value):
+        if not value.strip():
             raise ValueError('内容不能为空')
-        return v.strip()
+        return value.strip()
 
 
 class UserSimpleSchema(BaseModel):
@@ -38,8 +40,7 @@ class UserSimpleSchema(BaseModel):
         icon: str = ""
         is_hidden: bool = False
 
-        class Config:
-            from_attributes = True
+        model_config = ConfigDict(from_attributes=True)
 
     id: int
     username: str
@@ -47,8 +48,7 @@ class UserSimpleSchema(BaseModel):
     avatar_url: Optional[str] = None
     primary_group: Optional[GroupBadgeSchema] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class PostOutSchema(BaseModel):
     """帖子输出"""
@@ -72,6 +72,5 @@ class PostOutSchema(BaseModel):
     post_type: Optional[dict] = None
     event_data: Optional[dict] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
