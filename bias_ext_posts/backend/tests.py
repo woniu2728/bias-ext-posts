@@ -302,6 +302,128 @@ class PostsExtensionDiagnosticsTests(ExtensionRuntimeTestMixin, TestCase):
         content_service["notification_context"].assert_called_once_with(2)
         content_service["get_post_number"].assert_called_once_with(2)
 
+    def test_discussion_post_helpers_delegate_to_content_foundation(self):
+        from bias_ext_posts.backend import runtime
+
+        discussion = object()
+        actor = object()
+        content_service = {
+            "create_first_post": Mock(return_value="first-post"),
+            "get_first_post": Mock(return_value="loaded-first-post"),
+            "update_first_post_content": Mock(return_value="updated-first-post"),
+            "resubmit_first_post": Mock(return_value="resubmitted-first-post"),
+            "approve_first_post": Mock(return_value="approved-first-post"),
+            "reject_first_post": Mock(return_value="rejected-first-post"),
+            "approved_reply_counts_by_author": Mock(return_value={1: 2}),
+            "approved_discussion_stats": Mock(return_value={"comment_count": 3}),
+            "delete_discussion_posts": Mock(return_value=({"id": 1},)),
+        }
+
+        with patch(
+            "bias_core.extensions.runtime.get_runtime_content_posts_service",
+            return_value=content_service,
+        ), patch(
+            "bias_ext_posts.backend.models.Post.objects",
+            side_effect=AssertionError("discussion post helper should delegate to content"),
+        ):
+            self.assertEqual(
+                runtime._create_first_post(
+                    discussion=discussion,
+                    user=actor,
+                    content="body",
+                    content_html="<p>body</p>",
+                    post_type="comment",
+                    requires_approval=True,
+                    approved_at="approved-at",
+                    approved_by=actor,
+                ),
+                "first-post",
+            )
+            self.assertEqual(runtime._get_first_post(discussion), "loaded-first-post")
+            self.assertEqual(
+                runtime._update_first_post_content(
+                    discussion,
+                    content="edited",
+                    content_html="<p>edited</p>",
+                    editor=actor,
+                ),
+                "updated-first-post",
+            )
+            self.assertEqual(runtime._resubmit_first_post(discussion), "resubmitted-first-post")
+            self.assertEqual(
+                runtime._approve_first_post(
+                    discussion,
+                    approved_at="approved-at",
+                    approved_by=actor,
+                    note="ok",
+                ),
+                "approved-first-post",
+            )
+            self.assertEqual(
+                runtime._reject_first_post(
+                    discussion,
+                    rejected_at="rejected-at",
+                    rejected_by=actor,
+                    note="no",
+                ),
+                "rejected-first-post",
+            )
+            self.assertEqual(
+                runtime._approved_reply_counts_by_author(
+                    discussion,
+                    user_counted_post_types=("comment",),
+                ),
+                {1: 2},
+            )
+            self.assertEqual(
+                runtime._approved_discussion_stats(
+                    discussion,
+                    discussion_counted_post_types=("comment",),
+                ),
+                {"comment_count": 3},
+            )
+            self.assertEqual(runtime._delete_discussion_posts(discussion), ({"id": 1},))
+
+        content_service["create_first_post"].assert_called_once_with(
+            discussion=discussion,
+            user=actor,
+            content="body",
+            content_html="<p>body</p>",
+            post_type="comment",
+            requires_approval=True,
+            approved_at="approved-at",
+            approved_by=actor,
+        )
+        content_service["get_first_post"].assert_called_once_with(discussion)
+        content_service["update_first_post_content"].assert_called_once_with(
+            discussion,
+            content="edited",
+            content_html="<p>edited</p>",
+            editor=actor,
+        )
+        content_service["resubmit_first_post"].assert_called_once_with(discussion)
+        content_service["approve_first_post"].assert_called_once_with(
+            discussion,
+            approved_at="approved-at",
+            approved_by=actor,
+            note="ok",
+        )
+        content_service["reject_first_post"].assert_called_once_with(
+            discussion,
+            rejected_at="rejected-at",
+            rejected_by=actor,
+            note="no",
+        )
+        content_service["approved_reply_counts_by_author"].assert_called_once_with(
+            discussion,
+            user_counted_post_types=("comment",),
+        )
+        content_service["approved_discussion_stats"].assert_called_once_with(
+            discussion,
+            discussion_counted_post_types=("comment",),
+        )
+        content_service["delete_discussion_posts"].assert_called_once_with(discussion)
+
     def test_inspect_reports_posts_wrapper_no_longer_owns_models(self):
         stdout = StringIO()
         call_command(

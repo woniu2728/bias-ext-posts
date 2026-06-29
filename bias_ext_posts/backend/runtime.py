@@ -277,6 +277,19 @@ def _create_first_post(
     approved_at=None,
     approved_by=None,
 ):
+    content_method = _content_posts_method("create_first_post")
+    if content_method is not None:
+        return content_method(
+            discussion=discussion,
+            user=user,
+            content=content,
+            content_html=content_html,
+            post_type=post_type,
+            requires_approval=requires_approval,
+            approved_at=approved_at,
+            approved_by=approved_by,
+        )
+
     from bias_ext_posts.backend.models import Post
 
     return Post.objects.create(
@@ -293,6 +306,10 @@ def _create_first_post(
 
 
 def _get_first_post(discussion):
+    content_method = _content_posts_method("get_first_post")
+    if content_method is not None:
+        return content_method(discussion)
+
     from bias_ext_posts.backend.models import Post
 
     first_post_id = getattr(discussion, "first_post_id", None)
@@ -302,6 +319,10 @@ def _get_first_post(discussion):
 
 
 def _update_first_post_content(discussion, *, content: str, content_html: str, editor):
+    content_method = _content_posts_method("update_first_post_content")
+    if content_method is not None:
+        return content_method(discussion, content=content, content_html=content_html, editor=editor)
+
     from django.utils import timezone
     from bias_ext_posts.backend.models import Post
 
@@ -315,6 +336,10 @@ def _update_first_post_content(discussion, *, content: str, content_html: str, e
 
 
 def _resubmit_first_post(discussion):
+    content_method = _content_posts_method("resubmit_first_post")
+    if content_method is not None:
+        return content_method(discussion)
+
     from bias_ext_posts.backend.models import Post
 
     first_post = Post.objects.get(id=discussion.first_post_id)
@@ -337,6 +362,10 @@ def _resubmit_first_post(discussion):
 
 
 def _approve_first_post(discussion, *, approved_at, approved_by, note: str = ""):
+    content_method = _content_posts_method("approve_first_post")
+    if content_method is not None:
+        return content_method(discussion, approved_at=approved_at, approved_by=approved_by, note=note)
+
     from bias_core.extensions.runtime import refresh_runtime_model_private
     from bias_ext_posts.backend.models import Post
 
@@ -363,6 +392,10 @@ def _approve_first_post(discussion, *, approved_at, approved_by, note: str = "")
 
 
 def _reject_first_post(discussion, *, rejected_at, rejected_by, note: str = ""):
+    content_method = _content_posts_method("reject_first_post")
+    if content_method is not None:
+        return content_method(discussion, rejected_at=rejected_at, rejected_by=rejected_by, note=note)
+
     from bias_core.extensions.runtime import refresh_runtime_model_private
     from bias_ext_posts.backend.models import Post
 
@@ -389,6 +422,10 @@ def _reject_first_post(discussion, *, rejected_at, rejected_by, note: str = ""):
 
 
 def _approved_reply_counts_by_author(discussion, *, user_counted_post_types) -> dict:
+    content_method = _content_posts_method("approved_reply_counts_by_author")
+    if content_method is not None:
+        return dict(content_method(discussion, user_counted_post_types=user_counted_post_types) or {})
+
     from django.db.models import Count
     from bias_ext_posts.backend.models import Post
 
@@ -408,6 +445,10 @@ def _approved_reply_counts_by_author(discussion, *, user_counted_post_types) -> 
 
 
 def _approved_discussion_stats(discussion, *, discussion_counted_post_types) -> dict:
+    content_method = _content_posts_method("approved_discussion_stats")
+    if content_method is not None:
+        return dict(content_method(discussion, discussion_counted_post_types=discussion_counted_post_types) or {})
+
     from django.db.models import Count
     from bias_ext_posts.backend.models import Post
 
@@ -447,6 +488,10 @@ def _approved_discussion_stats(discussion, *, discussion_counted_post_types) -> 
 
 
 def _delete_discussion_posts(discussion) -> tuple[dict, ...]:
+    content_method = _content_posts_method("delete_discussion_posts")
+    if content_method is not None:
+        return tuple(content_method(discussion) or ())
+
     from bias_ext_posts.backend.models import Post
 
     deleted_posts = tuple(
