@@ -514,6 +514,23 @@ class PostPaginationTests(ExtensionRuntimeTestMixin, TestCase):
         self.assertIn("comment", kwargs["user_counted_post_types"])
         self.assertIs(kwargs["runtime_model"], Post)
 
+    def test_update_post_delegates_to_content_foundation(self):
+        updated_post = SimpleNamespace(id=91, content="Edited")
+        content_service = {"update": Mock(return_value=updated_post)}
+
+        with patch(
+            "bias_ext_posts.backend.services.get_runtime_content_posts_service",
+            return_value=content_service,
+        ):
+            updated = PostService.update_post(91, self.user, "Edited")
+
+        self.assertIs(updated, updated_post)
+        content_service["update"].assert_called_once()
+        args, kwargs = content_service["update"].call_args
+        self.assertEqual(args, (91, self.user, "Edited"))
+        self.assertTrue(callable(kwargs["can_edit_post_cb"]))
+        self.assertIs(kwargs["runtime_model"], Post)
+
     def test_delete_post_delegates_to_content_foundation(self):
         content_service = {"delete": Mock(return_value=True)}
 
@@ -530,6 +547,46 @@ class PostPaginationTests(ExtensionRuntimeTestMixin, TestCase):
         self.assertTrue(callable(kwargs["can_delete_post_cb"]))
         self.assertIn("comment", kwargs["discussion_counted_post_types"])
         self.assertIn("comment", kwargs["user_counted_post_types"])
+
+    def test_approve_post_delegates_to_content_foundation(self):
+        approved_post = SimpleNamespace(id=91, approval_status=Post.APPROVAL_APPROVED)
+        content_service = {"approve": Mock(return_value=approved_post)}
+        post = SimpleNamespace(id=91)
+
+        with patch(
+            "bias_ext_posts.backend.services.get_runtime_content_posts_service",
+            return_value=content_service,
+        ):
+            approved = PostService.approve_post(post, self.user, note="ok")
+
+        self.assertIs(approved, approved_post)
+        content_service["approve"].assert_called_once()
+        args, kwargs = content_service["approve"].call_args
+        self.assertEqual(args, (91, self.user))
+        self.assertEqual(kwargs["note"], "ok")
+        self.assertIn("comment", kwargs["discussion_counted_post_types"])
+        self.assertIn("comment", kwargs["user_counted_post_types"])
+        self.assertIs(kwargs["runtime_model"], Post)
+
+    def test_reject_post_delegates_to_content_foundation(self):
+        rejected_post = SimpleNamespace(id=91, approval_status=Post.APPROVAL_REJECTED)
+        content_service = {"reject": Mock(return_value=rejected_post)}
+        post = SimpleNamespace(id=91)
+
+        with patch(
+            "bias_ext_posts.backend.services.get_runtime_content_posts_service",
+            return_value=content_service,
+        ):
+            rejected = PostService.reject_post(post, self.user, note="bad")
+
+        self.assertIs(rejected, rejected_post)
+        content_service["reject"].assert_called_once()
+        args, kwargs = content_service["reject"].call_args
+        self.assertEqual(args, (91, self.user))
+        self.assertEqual(kwargs["note"], "bad")
+        self.assertIn("comment", kwargs["discussion_counted_post_types"])
+        self.assertIn("comment", kwargs["user_counted_post_types"])
+        self.assertIs(kwargs["runtime_model"], Post)
 
     def test_create_post_counts_each_approved_participant_once(self):
         other_user = User.objects.create_user(

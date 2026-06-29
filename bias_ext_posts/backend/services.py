@@ -234,6 +234,17 @@ class PostService:
         Raises:
             PermissionDenied: 权限不足
         """
+        content_posts = get_runtime_content_posts_service(None)
+        if content_posts is not None:
+            update = content_posts.get("update") if isinstance(content_posts, dict) else getattr(content_posts, "update", None)
+            if callable(update):
+                return update(
+                    post_id,
+                    user,
+                    content,
+                    can_edit_post_cb=PostService.can_edit_post,
+                    runtime_model=Post,
+                )
         return service_lifecycle.update_post(
             post_id,
             user,
@@ -350,6 +361,18 @@ class PostService:
 
     @staticmethod
     def approve_post(post: Post, admin_user: Any, note: str = "") -> Post:
+        content_posts = get_runtime_content_posts_service(None)
+        if content_posts is not None:
+            approve = content_posts.get("approve") if isinstance(content_posts, dict) else getattr(content_posts, "approve", None)
+            if callable(approve):
+                return approve(
+                    post.id,
+                    admin_user,
+                    note=note,
+                    discussion_counted_post_types=_get_discussion_counted_post_types(),
+                    user_counted_post_types=_get_user_counted_post_types(),
+                    runtime_model=Post,
+                )
         return service_moderation.approve_post(
             post,
             admin_user,
@@ -361,6 +384,18 @@ class PostService:
 
     @staticmethod
     def reject_post(post: Post, admin_user: Any, note: str = "") -> Post:
+        content_posts = get_runtime_content_posts_service(None)
+        if content_posts is not None:
+            reject = content_posts.get("reject") if isinstance(content_posts, dict) else getattr(content_posts, "reject", None)
+            if callable(reject):
+                return reject(
+                    post.id,
+                    admin_user,
+                    note=note,
+                    discussion_counted_post_types=_get_discussion_counted_post_types(),
+                    user_counted_post_types=_get_user_counted_post_types(),
+                    runtime_model=Post,
+                )
         return service_moderation.reject_post(
             post,
             admin_user,
