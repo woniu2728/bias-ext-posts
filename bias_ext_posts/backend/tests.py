@@ -418,6 +418,32 @@ class PostPaginationTests(ExtensionRuntimeTestMixin, TestCase):
         self.assertTrue(state["failed"])
         self.assertEqual(post.content, "Retry reply")
 
+    def test_create_post_delegates_to_content_foundation_when_available(self):
+        content_service = {"create": Mock(return_value=SimpleNamespace(id=91, content="Delegated reply"))}
+
+        with patch(
+            "bias_ext_posts.backend.services.get_runtime_content_posts_service",
+            return_value=content_service,
+        ):
+            post = PostService.create_post(
+                discussion_id=17,
+                content="Delegated reply",
+                user=self.user,
+                reply_to_post_id=3,
+            )
+
+        self.assertEqual(post.id, 91)
+        content_service["create"].assert_called_once()
+        kwargs = content_service["create"].call_args.kwargs
+        self.assertEqual(kwargs["discussion_id"], 17)
+        self.assertEqual(kwargs["content"], "Delegated reply")
+        self.assertIs(kwargs["user"], self.user)
+        self.assertEqual(kwargs["reply_to_post_id"], 3)
+        self.assertEqual(kwargs["default_post_type"], "comment")
+        self.assertIn("comment", kwargs["discussion_counted_post_types"])
+        self.assertIn("comment", kwargs["user_counted_post_types"])
+        self.assertTrue(callable(kwargs["can_reply_in_discussion_cb"]))
+
     def test_create_post_counts_each_approved_participant_once(self):
         other_user = User.objects.create_user(
             username="participant",

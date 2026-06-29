@@ -24,6 +24,7 @@ from bias_ext_posts.backend.events import (
     PostHiddenEvent,
     PostResubmittedEvent,
 )
+from bias_ext_posts.backend.content_models import get_post_model
 from bias_ext_posts.backend.models import Post
 
 
@@ -131,7 +132,8 @@ def get_post_list(
     stream_post_types,
     apply_visibility_filters_cb,
 ):
-    queryset = Post.objects.filter(
+    PostModel = get_post_model()
+    queryset = PostModel.objects.filter(
         discussion_id=discussion_id,
         type__in=stream_post_types,
     )
@@ -155,7 +157,8 @@ def get_post_by_id(
     can_view_post_cb,
 ):
     try:
-        post = Post.objects.select_related("discussion")
+        PostModel = get_post_model()
+        post = PostModel.objects.select_related("discussion")
         if preload is not None:
             post = preload(post)
         post = post.get(id=post_id)

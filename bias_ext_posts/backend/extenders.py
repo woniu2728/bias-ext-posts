@@ -9,6 +9,7 @@ from bias_core.extensions import (
     ModelExtender,
     ModelVisibilityExtender,
     RealtimeExtender,
+    RuntimeModel,
     SearchIndexExtender,
     ServiceProviderExtender,
     SettingsExtender,
@@ -101,8 +102,14 @@ def model_extenders():
         extender = extender.owns(model, description=description)
     return (
         extender,
-        ModelVisibilityExtender().scope(
+        ModelVisibilityExtender()
+        .scope(
             Post,
+            scope_post_view,
+            description="限制当前用户只能查看有权限访问的讨论帖子。",
+        )
+        .scope(
+            RuntimeModel("content.posts", description="content 基础包提供的帖子模型。"),
             scope_post_view,
             description="限制当前用户只能查看有权限访问的讨论帖子。",
         ),

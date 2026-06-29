@@ -14,6 +14,7 @@ from bias_core.extensions.runtime import get_runtime_resource_registry
 from bias_core.extensions.platform import get_forum_registry
 from bias_core.extensions.platform import BadJsonApiRequest
 from bias_core.extensions import ResourceEndpointDefinition
+from bias_ext_posts.backend.content_models import get_post_model
 from bias_ext_posts.backend.models import Post
 from bias_ext_posts.backend.schemas import PostCreateSchema, PostUpdateSchema
 from bias_ext_posts.backend.services import PostService
@@ -241,7 +242,8 @@ def dispatch_post_global_index(context):
     )
     resource_options = context.get("resource_options") or parse_resource_query_options(context["request"], "post")
 
-    queryset = Post.objects.select_related("discussion").filter(
+    PostModel = get_post_model()
+    queryset = PostModel.objects.select_related("discussion").filter(
         type__in=get_stream_post_types(),
     )
     default_includes = _post_default_includes(context)
@@ -446,7 +448,8 @@ def dispatch_post_delete(context):
     user = context["user"]
     post_id = _post_object_id(context)
     try:
-        post = Post.objects.select_related("discussion", "user").get(id=post_id)
+        PostModel = get_post_model()
+        post = PostModel.objects.select_related("discussion", "user").get(id=post_id)
         snapshot = {
             "discussion_id": post.discussion_id,
             "discussion_title": post.discussion.title if post.discussion else "",
@@ -476,7 +479,8 @@ def dispatch_post_toggle_hide(context):
     request = context["request"]
     post_id = _post_object_id(context)
     try:
-        post = Post.objects.select_related("discussion", "user").get(id=post_id)
+        PostModel = get_post_model()
+        post = PostModel.objects.select_related("discussion", "user").get(id=post_id)
         next_hidden = post.hidden_at is None
         PostService.set_hidden_state(post, context["user"], next_hidden)
         post.refresh_from_db()

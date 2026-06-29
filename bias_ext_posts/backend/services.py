@@ -11,6 +11,7 @@ from bias_core.extensions.platform import get_extension_settings, sqlite_write_r
 from bias_core.extensions.platform import get_forum_event_bus
 from bias_core.extensions.platform import evaluate_extension_policy
 from bias_core.extensions.runtime import (
+    get_runtime_content_posts_service,
     lock_runtime_discussion_for_post_number,
     refresh_runtime_discussion_approved_stats,
     validate_runtime_replyable_discussion,
@@ -81,6 +82,21 @@ class PostService:
         Raises:
             ValueError: 讨论不存在或已锁定
         """
+        content_posts = get_runtime_content_posts_service(None)
+        if content_posts is not None:
+            create = content_posts.get("create") if isinstance(content_posts, dict) else getattr(content_posts, "create", None)
+            if callable(create):
+                return create(
+                    discussion_id=discussion_id,
+                    content=content,
+                    user=user,
+                    reply_to_post_id=reply_to_post_id,
+                    default_post_type=_get_default_post_type(),
+                    discussion_counted_post_types=_get_discussion_counted_post_types(),
+                    user_counted_post_types=_get_user_counted_post_types(),
+                    can_reply_in_discussion_cb=PostService._validate_replyable_discussion,
+                    runtime_model=Post,
+                )
         return service_lifecycle.create_post(
             discussion_id,
             content,

@@ -3,6 +3,7 @@ from math import ceil
 from typing import Any, List, Optional
 
 from bias_core.extensions.platform import apply_model_visibility_scope, can_view_model_instance
+from bias_ext_posts.backend.content_models import get_post_model
 from bias_ext_posts.backend.models import Post
 
 
@@ -19,11 +20,11 @@ class PostStreamWindow:
 
 
 def can_view_post(post: Post, user: Optional[Any]) -> bool:
-    return can_view_model_instance(Post, post, user=user, ability="view")
+    return can_view_model_instance(get_post_model(), post, user=user, ability="view")
 
 
 def apply_visibility_filters(queryset, user: Optional[Any] = None):
-    return apply_model_visibility_scope(Post, queryset, user=user, ability="view")
+    return apply_model_visibility_scope(queryset.model, queryset, user=user, ability="view")
 
 
 def build_visible_post_queryset(
@@ -33,7 +34,8 @@ def build_visible_post_queryset(
     user: Optional[Any] = None,
     preload=None,
 ):
-    queryset = Post.objects.filter(
+    PostModel = get_post_model()
+    queryset = PostModel.objects.filter(
         discussion_id=discussion_id,
         type__in=stream_post_types,
     )
@@ -128,7 +130,8 @@ def get_page_for_near_post(
     limit: int = 20,
     user: Optional[Any] = None,
 ) -> int:
-    queryset = Post.objects.filter(
+    PostModel = get_post_model()
+    queryset = PostModel.objects.filter(
         discussion_id=discussion_id,
         number__lte=near,
         type__in=stream_post_types,

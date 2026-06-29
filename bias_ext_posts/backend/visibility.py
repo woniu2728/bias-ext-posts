@@ -45,7 +45,7 @@ def scope_post_view(queryset, context: dict):
     )
     public_queryset = scoped_queryset.filter(is_private=False)
     private_queryset = _apply_private_visibility_branch(
-        Post,
+        queryset.model,
         scoped_queryset.filter(is_private=True),
         user=user,
     )
