@@ -268,6 +268,19 @@ class PostService:
 
     @staticmethod
     def set_hidden_state(post: Post, admin_user: Any, is_hidden: bool) -> Post:
+        content_posts = get_runtime_content_posts_service(None)
+        if content_posts is not None:
+            set_hidden = content_posts.get("set_hidden_state") if isinstance(content_posts, dict) else getattr(content_posts, "set_hidden_state", None)
+            if callable(set_hidden):
+                return set_hidden(
+                    post,
+                    admin_user,
+                    is_hidden,
+                    can_hide_post_cb=PostService.can_hide_post,
+                    discussion_counted_post_types=_get_discussion_counted_post_types(),
+                    user_counted_post_types=_get_user_counted_post_types(),
+                    runtime_model=Post,
+                )
         return service_lifecycle.set_hidden_state(
             post,
             admin_user,

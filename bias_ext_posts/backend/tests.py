@@ -495,6 +495,25 @@ class PostPaginationTests(ExtensionRuntimeTestMixin, TestCase):
             require_visible=True,
         )
 
+    def test_set_hidden_state_delegates_to_content_foundation(self):
+        content_service = {"set_hidden_state": Mock(return_value=SimpleNamespace(id=91, is_hidden=True))}
+        post = SimpleNamespace(id=91, number=2)
+
+        with patch(
+            "bias_ext_posts.backend.services.get_runtime_content_posts_service",
+            return_value=content_service,
+        ):
+            hidden = PostService.set_hidden_state(post, self.user, True)
+
+        self.assertTrue(hidden.is_hidden)
+        content_service["set_hidden_state"].assert_called_once()
+        args, kwargs = content_service["set_hidden_state"].call_args
+        self.assertEqual(args, (post, self.user, True))
+        self.assertTrue(callable(kwargs["can_hide_post_cb"]))
+        self.assertIn("comment", kwargs["discussion_counted_post_types"])
+        self.assertIn("comment", kwargs["user_counted_post_types"])
+        self.assertIs(kwargs["runtime_model"], Post)
+
     def test_create_post_counts_each_approved_participant_once(self):
         other_user = User.objects.create_user(
             username="participant",
