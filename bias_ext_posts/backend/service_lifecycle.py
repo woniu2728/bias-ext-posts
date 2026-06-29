@@ -12,6 +12,7 @@ from bias_core.extensions.runtime import (
     ensure_runtime_user_email_confirmed,
     ensure_runtime_user_not_suspended,
     get_runtime_post_lifecycle_service,
+    get_runtime_content_posts_service,
     increment_runtime_user_comment_count,
     clamp_runtime_discussion_read_states,
     mark_runtime_discussion_read,
@@ -132,6 +133,18 @@ def get_post_list(
     stream_post_types,
     apply_visibility_filters_cb,
 ):
+    content_method = _content_posts_method("build_visible_queryset")
+    if content_method is not None:
+        queryset = content_method(
+            discussion_id,
+            stream_post_types=stream_post_types,
+            user=user,
+            preload=preload,
+        )
+        total = queryset.count()
+        offset = (page - 1) * limit
+        return list(queryset[offset:offset + limit]), total
+
     PostModel = get_post_model()
     queryset = PostModel.objects.filter(
         discussion_id=discussion_id,
@@ -156,6 +169,14 @@ def get_post_by_id(
     preload=None,
     can_view_post_cb,
 ):
+    content_method = _content_posts_method("get_by_id")
+    if content_method is not None:
+        return content_method(
+            post_id,
+            user=user,
+            preload=preload,
+            require_visible=True,
+        )
     try:
         PostModel = get_post_model()
         post = PostModel.objects.select_related("discussion")
@@ -425,6 +446,15 @@ def _apply_post_deleted_extensions(*, context: dict) -> dict:
     if post_lifecycle is None:
         return {}
     return post_lifecycle.apply_deleted(context=context)
+
+
+def _content_posts_method(name: str):
+    service = get_runtime_content_posts_service(None)
+    if isinstance(service, dict):
+        method = service.get(name)
+    else:
+        method = getattr(service, name, None) if service is not None else None
+    return method if callable(method) else None
 
 
 def is_post_number_conflict(exc: IntegrityError) -> bool:

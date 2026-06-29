@@ -444,6 +444,57 @@ class PostPaginationTests(ExtensionRuntimeTestMixin, TestCase):
         self.assertIn("comment", kwargs["user_counted_post_types"])
         self.assertTrue(callable(kwargs["can_reply_in_discussion_cb"]))
 
+    def test_post_repository_queries_delegate_to_content_foundation(self):
+        window = SimpleNamespace(
+            posts=[SimpleNamespace(id=1, number=7)],
+            total=12,
+            page=2,
+            limit=5,
+            current_start=7,
+            current_end=7,
+            has_previous=True,
+            has_more=True,
+        )
+        content_service = {
+            "get_window": Mock(return_value=window),
+            "get_page_for_near_post": Mock(return_value=3),
+            "get_by_id": Mock(return_value=SimpleNamespace(id=91)),
+        }
+
+        with patch(
+            "bias_ext_posts.backend.post_query_service.get_runtime_content_posts_service",
+            return_value=content_service,
+        ), patch(
+            "bias_ext_posts.backend.service_lifecycle.get_runtime_content_posts_service",
+            return_value=content_service,
+        ):
+            resolved_window = PostService.get_post_window(
+                discussion_id=17,
+                near=7,
+                limit=5,
+                user=self.user,
+            )
+            page = PostService.get_page_for_near_post(
+                discussion_id=17,
+                near=7,
+                limit=5,
+                user=self.user,
+            )
+            post = PostService.get_post_by_id(91, user=self.user)
+
+        self.assertEqual([item.number for item in resolved_window.posts], [7])
+        self.assertEqual(resolved_window.total, 12)
+        self.assertEqual(page, 3)
+        self.assertEqual(post.id, 91)
+        content_service["get_window"].assert_called_once()
+        content_service["get_page_for_near_post"].assert_called_once()
+        content_service["get_by_id"].assert_called_once_with(
+            91,
+            user=self.user,
+            preload=None,
+            require_visible=True,
+        )
+
     def test_create_post_counts_each_approved_participant_once(self):
         other_user = User.objects.create_user(
             username="participant",
