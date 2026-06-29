@@ -28,8 +28,11 @@ def get_stream_post_types():
     return get_forum_registry().get_stream_post_type_codes()
 
 
-def serialize_post(post, user=None, resource_options=None, default_includes=()):
+def serialize_post(post, user=None, resource_options=None, default_includes=(), resource_context=None):
     resource_options = resource_options or ResourceQueryOptions()
+    resolved_context = {"user": user}
+    if resource_context:
+        resolved_context.update(resource_context)
     response = {
         "id": post.id,
         "discussion_id": post.discussion_id,
@@ -53,7 +56,7 @@ def serialize_post(post, user=None, resource_options=None, default_includes=()):
         get_resource_registry().serialize(
             "post",
             post,
-            {"user": user},
+            resolved_context,
             only=resource_options.fields,
             include=merge_resource_includes(("user", "edited_user"), default_includes, resource_options.includes),
         )
@@ -357,6 +360,10 @@ def dispatch_post_index(context):
     except ValueError as error:
         return api_error(str(error), status=400)
 
+    post_resource_context = {
+        "post_visibility_checked": True,
+        "discussion_tag_visibility_cache": {},
+    }
     return {
         "total": window.total,
         "page": window.page,
@@ -370,6 +377,7 @@ def dispatch_post_index(context):
                 post,
                 user,
                 resource_options=resource_options,
+                resource_context=post_resource_context,
                 default_includes=default_includes,
             )
             for post in window.posts

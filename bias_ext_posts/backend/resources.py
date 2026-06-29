@@ -28,6 +28,7 @@ def post_resource_field_definitions():
             module_id="posts",
             resolver=resolve_post_can_edit,
             description="当前用户是否可以编辑该回复。",
+            select_related=("discussion",),
         ),
         ResourceFieldDefinition(
             resource="post",
@@ -35,6 +36,7 @@ def post_resource_field_definitions():
             module_id="posts",
             resolver=resolve_post_can_delete,
             description="当前用户是否可以删除该回复。",
+            select_related=("discussion",),
         ),
         ResourceFieldDefinition(
             resource="post",
@@ -42,6 +44,7 @@ def post_resource_field_definitions():
             module_id="posts",
             resolver=resolve_post_can_hide,
             description="当前用户是否可以隐藏或恢复该回复。",
+            select_related=("discussion",),
         ),
         ResourceFieldDefinition(
             resource="post",

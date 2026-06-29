@@ -1487,6 +1487,88 @@ class PostApiTests(TestCase):
         ]
         self.assertLessEqual(len(select_group_queries), 3)
 
+    def test_discussion_post_list_default_page_has_bounded_queries(self):
+        member_group = Group.objects.create(name="PostStreamBudgetMembers", color="#4d698e")
+        Permission.objects.create(group=member_group, permission="viewForum")
+        Permission.objects.create(group=member_group, permission="discussion.reply")
+        self.author.user_groups.add(member_group)
+        self.reporter.user_groups.add(member_group)
+        for index in range(3, 13):
+            PostService.create_post(
+                discussion_id=self.discussion.id,
+                content=f"预算回复 {index}",
+                user=self.reporter if index % 2 else self.author,
+            )
+
+        with CaptureQueriesContext(connection) as context:
+            response = self.client.get(
+                f"/api/discussions/{self.discussion.id}/posts",
+                {"limit": 10},
+                **self.auth_header(),
+            )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        payload = response.json()
+        self.assertEqual(len(payload["data"]), 10)
+        self.assertTrue(all(item["user"]["primary_group"]["name"] == member_group.name for item in payload["data"]))
+        if len(context.captured_queries) > 20:
+            from collections import Counter
+
+            query_counts = Counter()
+            for query in context.captured_queries:
+                sql = query["sql"].lower()
+                if ' from "posts"' in sql:
+                    query_counts["posts"] += 1
+                if ' from "discussions"' in sql:
+                    query_counts["discussions"] += 1
+                if ' from "users"' in sql:
+                    query_counts["users"] += 1
+                if "user_groups" in sql:
+                    query_counts["user_groups"] += 1
+                if "permissions" in sql:
+                    query_counts["permissions"] += 1
+                if "point_accounts" in sql:
+                    query_counts["point_accounts"] += 1
+                if "flags" in sql:
+                    query_counts["flags"] += 1
+                if "likes" in sql:
+                    query_counts["likes"] += 1
+                if "mentions" in sql:
+                    query_counts["mentions"] += 1
+            sample_queries = [
+                " ".join(query["sql"].split())[:220]
+                for query in context.captured_queries[:30]
+            ]
+            self.fail(
+                f"post stream query budget exceeded: {len(context.captured_queries)} "
+                f"{dict(query_counts)} sample={sample_queries}"
+            )
+        self.assertLessEqual(len(context.captured_queries), 20)
+
+    def test_post_list_virtual_relationship_nested_include_does_not_use_select_related(self):
+        for index in range(3, 7):
+            PostService.create_post(
+                discussion_id=self.discussion.id,
+                content=f"虚拟关系回复 {index}",
+                user=self.author,
+            )
+
+        with CaptureQueriesContext(connection) as context:
+            response = self.client.get(
+                f"/api/discussions/{self.discussion.id}/posts",
+                {"include": "eventPostMentionsTags.last_posted_discussion"},
+            )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        payload = response.json()
+        self.assertGreaterEqual(len(payload["data"]), 4)
+        invalid_select_queries = [
+            query["sql"]
+            for query in context.captured_queries
+            if "eventpostmentionstags" in query["sql"].lower()
+        ]
+        self.assertEqual(invalid_select_queries, [])
+
     def test_discussion_posts_api_supports_windowed_queries(self):
         for index in range(3, 13):
             PostService.create_post(
