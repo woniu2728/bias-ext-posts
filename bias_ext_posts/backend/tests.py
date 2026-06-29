@@ -1223,6 +1223,26 @@ class PostApiTests(TestCase):
         payload = response.json()
         self.assertEqual(payload["user"]["primary_group"]["name"], group.name)
 
+    def test_post_detail_default_payload_has_bounded_queries(self):
+        member_group = Group.objects.create(name="PostDetailBudgetMembers", color="#4d698e")
+        Permission.objects.create(group=member_group, permission="viewForum")
+        Permission.objects.create(group=member_group, permission="discussion.reply")
+        self.author.user_groups.add(member_group)
+        self.reporter.user_groups.add(member_group)
+
+        with CaptureQueriesContext(connection) as context:
+            response = self.client.get(
+                f"/api/posts/{self.post.id}",
+                **self.auth_header(),
+            )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        payload = response.json()
+        self.assertEqual(payload["user"]["primary_group"]["name"], member_group.name)
+        self.assertIn("can_like", payload)
+        query_summary = "\n".join(query["sql"] for query in context.captured_queries)
+        self.assertLessEqual(len(context.captured_queries), 14, query_summary)
+
     def test_post_detail_renders_missing_content_html_from_content(self):
         self.post.content = "正文 **加粗**"
         self.post.content_html = ""

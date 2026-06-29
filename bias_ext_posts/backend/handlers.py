@@ -404,7 +404,13 @@ def dispatch_post_show(context):
     if not post:
         return api_error("帖子不存在", status=404)
 
-    return serialize_post(post, user, resource_options=resource_options, default_includes=default_includes)
+    return serialize_post(
+        post,
+        user,
+        resource_options=resource_options,
+        default_includes=default_includes,
+        resource_context=_post_detail_resource_context(),
+    )
 
 
 def dispatch_post_update(context):
@@ -429,6 +435,7 @@ def dispatch_post_update(context):
             context["user"],
             resource_options=resource_options,
             default_includes=default_includes,
+            resource_context=_post_detail_resource_context(),
         )
     except Post.DoesNotExist:
         return api_error("帖子不存在", status=404)
@@ -449,6 +456,13 @@ def _reload_post_for_response(post_id: int, user, *, resource_options=None, defa
             default_includes=default_includes,
         ),
     )
+
+
+def _post_detail_resource_context():
+    return {
+        "post_visibility_checked": True,
+        "discussion_tag_visibility_cache": {},
+    }
 
 
 def dispatch_post_delete(context):
