@@ -12,6 +12,7 @@ from ninja_jwt.tokens import RefreshToken
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from bias_content.backend import runtime as content_runtime
 from bias_core.extensions.runtime import (
     create_runtime_discussion,
     delete_runtime_discussion,
@@ -244,7 +245,7 @@ class PostsExtensionDiagnosticsTests(ExtensionRuntimeTestMixin, TestCase):
         self.assertEqual(payload["number"], 1)
         self.assertEqual(payload["content"], "Post resource content")
 
-    def test_inspect_reports_posts_model_as_extension_owned(self):
+    def test_inspect_reports_posts_wrapper_no_longer_owns_models(self):
         stdout = StringIO()
         call_command(
             "inspect_extensions",
@@ -257,16 +258,12 @@ class PostsExtensionDiagnosticsTests(ExtensionRuntimeTestMixin, TestCase):
         audit = extension["model_ownership_audit"]
 
         self.assertEqual(extension["id"], "posts")
-        self.assertEqual(audit["owned_model_count"], 1)
+        self.assertEqual(audit["owned_model_count"], 0)
         self.assertEqual(audit["app_label_migration_required_count"], 0)
         self.assertEqual(extension["django_app_label"], "posts")
         self.assertEqual(audit["target_app_label"], "posts")
         self.assertEqual(audit["target_app_label_source"], "manifest")
-        self.assertTrue(all(
-            item["target_app_label"] == "posts"
-            and item["target_app_label_source"] == "manifest"
-            for item in audit["items"]
-        ))
+        self.assertEqual(audit["items"], [])
         self.assertEqual(extension["migration_plan"]["pending_files"], [])
 
 
@@ -854,8 +851,8 @@ class PostPaginationTests(ExtensionRuntimeTestMixin, TestCase):
         )
 
         with patch(
-            "bias_ext_posts.backend.services.PostService._lock_discussion_for_post_number",
-            wraps=PostService._lock_discussion_for_post_number,
+            "bias_content.backend.runtime._lock_discussion_for_post_number",
+            wraps=content_runtime._lock_discussion_for_post_number,
         ) as lock_discussion_mock:
             PostService.create_post(
                 discussion_id=discussion.id,

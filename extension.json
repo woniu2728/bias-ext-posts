@@ -2,6 +2,7 @@
   "id": "posts",
   "name": "Posts",
   "version": "0.1.0",
+  "description": "提供帖子 API、前端发帖入口和帖子生命周期界面；基础帖子数据由 content 提供。",
   "category": "feature",
   "authors": [
     "Bias"
@@ -33,6 +34,6 @@
     "auto_enable": true
   },
   "security": {
-    "capabilities_notice": "Post domain extension; owns post records, composer runtime, and post lifecycle/moderation behavior."
+    "capabilities_notice": "Post UI/API wrapper; delegates post records to the content foundation and contributes composer runtime, lifecycle, and moderation surfaces."
   }
 }
