@@ -257,6 +257,17 @@ class PostService:
         Raises:
             PermissionDenied: 权限不足
         """
+        content_posts = get_runtime_content_posts_service(None)
+        if content_posts is not None:
+            delete = content_posts.get("delete") if isinstance(content_posts, dict) else getattr(content_posts, "delete", None)
+            if callable(delete):
+                return bool(delete(
+                    post_id,
+                    user,
+                    can_delete_post_cb=PostService.can_delete_post,
+                    discussion_counted_post_types=_get_discussion_counted_post_types(),
+                    user_counted_post_types=_get_user_counted_post_types(),
+                ))
         return service_lifecycle.delete_post(
             post_id,
             user,

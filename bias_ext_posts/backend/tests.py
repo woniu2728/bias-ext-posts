@@ -514,6 +514,23 @@ class PostPaginationTests(ExtensionRuntimeTestMixin, TestCase):
         self.assertIn("comment", kwargs["user_counted_post_types"])
         self.assertIs(kwargs["runtime_model"], Post)
 
+    def test_delete_post_delegates_to_content_foundation(self):
+        content_service = {"delete": Mock(return_value=True)}
+
+        with patch(
+            "bias_ext_posts.backend.services.get_runtime_content_posts_service",
+            return_value=content_service,
+        ):
+            deleted = PostService.delete_post(91, self.user)
+
+        self.assertTrue(deleted)
+        content_service["delete"].assert_called_once()
+        args, kwargs = content_service["delete"].call_args
+        self.assertEqual(args, (91, self.user))
+        self.assertTrue(callable(kwargs["can_delete_post_cb"]))
+        self.assertIn("comment", kwargs["discussion_counted_post_types"])
+        self.assertIn("comment", kwargs["user_counted_post_types"])
+
     def test_create_post_counts_each_approved_participant_once(self):
         other_user = User.objects.create_user(
             username="participant",
