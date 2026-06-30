@@ -21,6 +21,7 @@ from bias_core.extensions.testing import (
     ExtensionRuntimeTestMixin,
     ResourceRegistry,
     Setting,
+    assert_runtime_service_contracts,
     save_extension_settings,
     bootstrap_enabled_extension_application,
     capture_runtime_events,
@@ -117,6 +118,12 @@ class PostsExtensionDiagnosticsTests(ExtensionRuntimeTestMixin, TestCase):
         realtime_post_payload = application.get_service("realtime.post_payload")
         runtime_view = application.get_runtime_extension("posts")
 
+        assert_runtime_service_contracts(
+            application,
+            "posts",
+            "posts.service",
+            "realtime.post_payload",
+        )
         self.assertEqual(runtime_view.capabilities, ("post-api", "post-ui", "post_lifecycle"))
         self.assertIn("posts.service", application.get_service_provider_keys(extension_id="posts"))
         self.assertIn("discussion.posts", application.get_service_provider_keys(extension_id="posts"))
