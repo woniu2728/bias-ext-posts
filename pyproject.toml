@@ -26,3 +26,6 @@ include = ["bias_ext_posts*"]
   "frontend/forum/sdk.d.ts",
   "frontend/forum/sdk.js",
 ]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "bias_core.extension_test_settings"
