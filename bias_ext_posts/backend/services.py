@@ -441,7 +441,8 @@ class PostService:
             allowed = True
         elif post.user_id == user.id:
             allowed = (
-                has_runtime_forum_permission(user, "post.editOwn")
+                post.approval_status == Post.APPROVAL_REJECTED
+                or has_runtime_forum_permission(user, "post.editOwn")
                 or has_runtime_forum_permission(user, "discussion.editOwn")
             )
         return bool(evaluate_extension_policy(
