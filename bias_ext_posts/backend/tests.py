@@ -44,7 +44,37 @@ def _runtime_facade(name: str):
     return getattr(import_module("bias_core.extensions.runtime"), name)
 
 
+def discussion_tags_payload(tag_ids):
+    return {
+        "data": {
+            "relationships": {
+                "tags": {
+                    "data": [
+                        {"type": "tag", "id": str(tag_id)}
+                        for tag_id in tag_ids
+                    ],
+                },
+            },
+        },
+    }
+
+
+def default_discussion_tag():
+    from bias_ext_tags.backend.models import Tag
+
+    tag, _created = Tag.objects.get_or_create(
+        slug="posts-tests",
+        defaults={
+            "name": "Posts Tests",
+            "color": "#3498db",
+        },
+    )
+    return tag
+
+
 def create_runtime_discussion(*args, **kwargs):
+    if not kwargs.get("extension_payload"):
+        kwargs["extension_payload"] = discussion_tags_payload([default_discussion_tag().id])
     return _runtime_facade("create_runtime_discussion")(*args, **kwargs)
 
 

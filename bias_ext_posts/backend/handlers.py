@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from django.core.exceptions import PermissionDenied
+from django.db.models import Subquery
 
 from bias_core.extensions.platform import (
     PaginationService,
@@ -23,6 +24,18 @@ def get_runtime_resource_registry(*args, **kwargs):
     from bias_core.extensions.runtime import get_runtime_resource_registry as runtime_get_resource_registry
 
     return runtime_get_resource_registry(*args, **kwargs)
+
+
+def get_runtime_discussion_model(*args, **kwargs):
+    from bias_core.extensions.runtime import get_runtime_discussion_model as runtime_get_discussion_model
+
+    return runtime_get_discussion_model(*args, **kwargs)
+
+
+def get_runtime_visible_discussion_ids(*args, **kwargs):
+    from bias_core.extensions.runtime import get_runtime_visible_discussion_ids as runtime_get_visible_discussion_ids
+
+    return runtime_get_visible_discussion_ids(*args, **kwargs)
 
 
 def get_resource_registry():
@@ -351,6 +364,9 @@ def dispatch_post_create(context):
 def dispatch_post_index(context):
     discussion_id = _post_object_id(context)
     user = context.get("user")
+    if not _discussion_is_visible(discussion_id, user=user):
+        return api_error("讨论不存在", status=404)
+
     page, limit = PaginationService.normalize(
         _post_query_value(context, "page", 1),
         _post_query_value(context, "limit", 20),
@@ -399,6 +415,19 @@ def dispatch_post_index(context):
             for post in window.posts
         ],
     }
+
+
+def _discussion_is_visible(discussion_id: int, *, user=None) -> bool:
+    if discussion_id <= 0:
+        return False
+    DiscussionModel = get_runtime_discussion_model()
+    queryset = DiscussionModel.objects.filter(id=discussion_id)
+    visible_ids = get_runtime_visible_discussion_ids(
+        user=user,
+        ability="view",
+        context={"user": user},
+    )
+    return queryset.filter(id__in=Subquery(visible_ids)).exists()
 
 
 def dispatch_post_show(context):
