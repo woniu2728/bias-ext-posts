@@ -1096,6 +1096,60 @@ class PostPaginationTests(ExtensionRuntimeTestMixin, TestCase):
         self.assertTrue(can_view_allowed)
         self.assertLessEqual(len(queries), 6)
 
+    def test_wildcard_discussion_scoper_does_not_enable_hidden_post_branch(self):
+        from bias_core.extensions import ExtensionModelVisibilityDefinition
+
+        discussion_model = get_runtime_discussion_model()
+        reader = User.objects.create_user(
+            username="post-wildcard-reader",
+            email="post-wildcard-reader@example.com",
+            password="password123",
+            is_email_confirmed=True,
+        )
+        discussion = discussion_model.objects.create(
+            title="Wildcard hidden post discussion",
+            slug="wildcard-hidden-post-discussion",
+            user=self.user,
+        )
+        hidden_post = Post.objects.create(
+            discussion_id=discussion.id,
+            number=1,
+            user=self.user,
+            content="Hidden post behind wildcard scoper",
+            hidden_at=timezone.now(),
+        )
+
+        app = get_extension_host()
+        app.models.register_visibility(
+            "discussions",
+            ExtensionModelVisibilityDefinition(
+                model=discussion_model,
+                ability="view",
+                scope=allow_all_model_visibility,
+            ),
+        )
+        app.models.register_visibility(
+            "wildcard-runtime",
+            ExtensionModelVisibilityDefinition(
+                model=discussion_model,
+                ability="*",
+                scope=lambda queryset, context: queryset,
+            ),
+        )
+
+        with patch("bias_core.extensions.runtime_models.get_runtime_model_service", return_value=app.models), patch(
+            "bias_ext_posts.backend.visibility.has_runtime_forum_permission",
+            return_value=False,
+        ):
+            visible_ids = set(
+                PostService.apply_visibility_filters(
+                    Post.objects.filter(id=hidden_post.id),
+                    reader,
+                ).values_list("id", flat=True)
+            )
+
+        self.assertNotIn(hidden_post.id, visible_ids)
+
     def test_own_reply_advances_read_state_without_auto_follow(self):
         self.user.preferences = {"follow_after_reply": False}
         self.user.save(update_fields=["preferences"])
