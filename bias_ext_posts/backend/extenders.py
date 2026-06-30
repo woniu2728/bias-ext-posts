@@ -172,6 +172,9 @@ def service_extenders():
                 "set_hidden_state",
                 "update",
             ),
+        ).service(
+            "realtime.post_payload",
+            required_methods=("serialize_by_id",),
         ),
         LifecycleExtender(),
     )
