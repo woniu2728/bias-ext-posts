@@ -26,16 +26,35 @@ def get_runtime_resource_registry(*args, **kwargs):
     return runtime_get_resource_registry(*args, **kwargs)
 
 
-def get_runtime_discussion_model(*args, **kwargs):
-    from bias_core.extensions.runtime import get_runtime_discussion_model as runtime_get_discussion_model
+def get_runtime_service(service_key: str, default=None):
+    from bias_core.extensions.runtime import get_runtime_service as runtime_get_service
 
-    return runtime_get_discussion_model(*args, **kwargs)
+    return runtime_get_service(service_key, default)
 
 
-def get_runtime_visible_discussion_ids(*args, **kwargs):
-    from bias_core.extensions.runtime import get_runtime_visible_discussion_ids as runtime_get_visible_discussion_ids
+def _service_method(service, name: str):
+    if isinstance(service, dict):
+        method = service.get(name)
+    else:
+        method = getattr(service, name, None)
+    if not callable(method):
+        raise RuntimeError(f"Posts 扩展运行时服务缺少方法: {name}")
+    return method
 
-    return runtime_get_visible_discussion_ids(*args, **kwargs)
+
+def get_discussion_model():
+    service = get_runtime_service("content.discussions")
+    if isinstance(service, dict):
+        model = service.get("model")
+    else:
+        model = getattr(service, "model", None)
+    if model is None:
+        raise RuntimeError("Posts 扩展运行时服务缺少值: model")
+    return model
+
+
+def get_visible_discussion_ids(*args, **kwargs):
+    return _service_method(get_runtime_service("content.discussions"), "get_visible_ids")(*args, **kwargs)
 
 
 def get_resource_registry():
@@ -420,9 +439,9 @@ def dispatch_post_index(context):
 def _discussion_is_visible(discussion_id: int, *, user=None) -> bool:
     if discussion_id <= 0:
         return False
-    DiscussionModel = get_runtime_discussion_model()
+    DiscussionModel = get_discussion_model()
     queryset = DiscussionModel.objects.filter(id=discussion_id)
-    visible_ids = get_runtime_visible_discussion_ids(
+    visible_ids = get_visible_discussion_ids(
         user=user,
         ability="view",
         context={"user": user},

@@ -340,7 +340,7 @@ class PostsExtensionDiagnosticsTests(ExtensionRuntimeTestMixin, TestCase):
         }
 
         with patch(
-            "bias_core.extensions.runtime.get_runtime_content_posts_service",
+            "bias_core.extensions.runtime.get_runtime_service",
             return_value=content_service,
         ), patch(
             "bias_ext_posts.backend.models.Post.objects",
@@ -387,7 +387,7 @@ class PostsExtensionDiagnosticsTests(ExtensionRuntimeTestMixin, TestCase):
         }
 
         with patch(
-            "bias_core.extensions.runtime.get_runtime_content_posts_service",
+            "bias_core.extensions.runtime.get_runtime_service",
             return_value=content_service,
         ), patch(
             "bias_ext_posts.backend.models.Post.objects",
@@ -692,7 +692,7 @@ class PostPaginationTests(ExtensionRuntimeTestMixin, TestCase):
             )
 
         with patch(
-            "bias_ext_posts.backend.post_query_service.get_runtime_content_posts_service",
+            "bias_ext_posts.backend.post_query_service.get_runtime_service",
             return_value=None,
         ), CaptureQueriesContext(connection) as queries:
             window = PostService.get_post_window(
@@ -738,7 +738,7 @@ class PostPaginationTests(ExtensionRuntimeTestMixin, TestCase):
         content_service = {"create": Mock(return_value=SimpleNamespace(id=91, content="Delegated reply"))}
 
         with patch(
-            "bias_ext_posts.backend.services.get_runtime_content_posts_service",
+            "bias_ext_posts.backend.services.get_content_posts_service",
             return_value=content_service,
         ):
             post = PostService.create_post(
@@ -778,10 +778,10 @@ class PostPaginationTests(ExtensionRuntimeTestMixin, TestCase):
         }
 
         with patch(
-            "bias_ext_posts.backend.post_query_service.get_runtime_content_posts_service",
+            "bias_ext_posts.backend.post_query_service.get_runtime_service",
             return_value=content_service,
         ), patch(
-            "bias_ext_posts.backend.service_lifecycle.get_runtime_content_posts_service",
+            "bias_ext_posts.backend.service_lifecycle.get_runtime_service",
             return_value=content_service,
         ):
             resolved_window = PostService.get_post_window(
@@ -816,7 +816,7 @@ class PostPaginationTests(ExtensionRuntimeTestMixin, TestCase):
         post = SimpleNamespace(id=91, number=2)
 
         with patch(
-            "bias_ext_posts.backend.services.get_runtime_content_posts_service",
+            "bias_ext_posts.backend.services.get_content_posts_service",
             return_value=content_service,
         ):
             hidden = PostService.set_hidden_state(post, self.user, True)
@@ -835,7 +835,7 @@ class PostPaginationTests(ExtensionRuntimeTestMixin, TestCase):
         content_service = {"update": Mock(return_value=updated_post)}
 
         with patch(
-            "bias_ext_posts.backend.services.get_runtime_content_posts_service",
+            "bias_ext_posts.backend.services.get_content_posts_service",
             return_value=content_service,
         ):
             updated = PostService.update_post(91, self.user, "Edited")
@@ -851,7 +851,7 @@ class PostPaginationTests(ExtensionRuntimeTestMixin, TestCase):
         content_service = {"delete": Mock(return_value=True)}
 
         with patch(
-            "bias_ext_posts.backend.services.get_runtime_content_posts_service",
+            "bias_ext_posts.backend.services.get_content_posts_service",
             return_value=content_service,
         ):
             deleted = PostService.delete_post(91, self.user)
@@ -870,7 +870,7 @@ class PostPaginationTests(ExtensionRuntimeTestMixin, TestCase):
         post = SimpleNamespace(id=91)
 
         with patch(
-            "bias_ext_posts.backend.services.get_runtime_content_posts_service",
+            "bias_ext_posts.backend.services.get_content_posts_service",
             return_value=content_service,
         ):
             approved = PostService.approve_post(post, self.user, note="ok")
@@ -890,7 +890,7 @@ class PostPaginationTests(ExtensionRuntimeTestMixin, TestCase):
         post = SimpleNamespace(id=91)
 
         with patch(
-            "bias_ext_posts.backend.services.get_runtime_content_posts_service",
+            "bias_ext_posts.backend.services.get_content_posts_service",
             return_value=content_service,
         ):
             rejected = PostService.reject_post(post, self.user, note="bad")
@@ -1048,7 +1048,7 @@ class PostPaginationTests(ExtensionRuntimeTestMixin, TestCase):
             ),
         )
         with patch("bias_core.extensions.runtime_models.get_runtime_model_service", return_value=app.models), patch(
-            "bias_ext_posts.backend.visibility.get_runtime_discussion_model",
+            "bias_ext_posts.backend.visibility.get_visible_discussion_ids",
             create=True,
             side_effect=AssertionError("posts visibility must use content discussion visibility contract"),
         ), CaptureQueriesContext(connection) as queries:
@@ -1113,11 +1113,11 @@ class PostPaginationTests(ExtensionRuntimeTestMixin, TestCase):
             ),
         )
         with patch("bias_core.extensions.runtime_models.get_runtime_model_service", return_value=app.models), patch(
-            "bias_ext_posts.backend.visibility.get_runtime_discussion_model",
+            "bias_ext_posts.backend.visibility.get_visible_discussion_ids",
             create=True,
             side_effect=AssertionError("posts visibility must use content discussion visibility contract"),
         ), patch(
-            "bias_ext_posts.backend.visibility.has_runtime_forum_permission",
+            "bias_ext_posts.backend.visibility.has_forum_permission",
             return_value=False,
         ), CaptureQueriesContext(connection) as queries:
             visible_ids = set(
@@ -1175,7 +1175,7 @@ class PostPaginationTests(ExtensionRuntimeTestMixin, TestCase):
         )
 
         with patch("bias_core.extensions.runtime_models.get_runtime_model_service", return_value=app.models), patch(
-            "bias_ext_posts.backend.visibility.has_runtime_forum_permission",
+            "bias_ext_posts.backend.visibility.has_forum_permission",
             return_value=False,
         ):
             visible_ids = set(

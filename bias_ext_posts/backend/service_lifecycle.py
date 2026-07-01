@@ -17,22 +17,32 @@ from bias_ext_posts.backend.content_models import get_post_model
 from bias_ext_posts.backend.models import Post
 
 
-def ensure_runtime_forum_permission(*args, **kwargs):
-    from bias_core.extensions.runtime import ensure_runtime_forum_permission as runtime_ensure_forum_permission
+def get_runtime_service(service_key: str, default=None):
+    from bias_core.extensions.runtime import get_runtime_service as runtime_get_service
 
-    return runtime_ensure_forum_permission(*args, **kwargs)
-
-
-def ensure_runtime_user_email_confirmed(*args, **kwargs):
-    from bias_core.extensions.runtime import ensure_runtime_user_email_confirmed as runtime_ensure_user_email_confirmed
-
-    return runtime_ensure_user_email_confirmed(*args, **kwargs)
+    return runtime_get_service(service_key, default)
 
 
-def ensure_runtime_user_not_suspended(*args, **kwargs):
-    from bias_core.extensions.runtime import ensure_runtime_user_not_suspended as runtime_ensure_user_not_suspended
+def _service_method(service, name: str):
+    if isinstance(service, dict):
+        method = service.get(name)
+    else:
+        method = getattr(service, name, None)
+    if not callable(method):
+        raise RuntimeError(f"Posts 扩展运行时服务缺少方法: {name}")
+    return method
 
-    return runtime_ensure_user_not_suspended(*args, **kwargs)
+
+def ensure_forum_permission(*args, **kwargs):
+    return _service_method(get_runtime_service("users.service"), "ensure_forum_permission")(*args, **kwargs)
+
+
+def ensure_user_email_confirmed(*args, **kwargs):
+    return _service_method(get_runtime_service("users.service"), "ensure_email_confirmed")(*args, **kwargs)
+
+
+def ensure_user_not_suspended(*args, **kwargs):
+    return _service_method(get_runtime_service("users.service"), "ensure_not_suspended")(*args, **kwargs)
 
 
 def get_runtime_post_lifecycle_service(*args, **kwargs):
@@ -41,28 +51,16 @@ def get_runtime_post_lifecycle_service(*args, **kwargs):
     return runtime_get_post_lifecycle_service(*args, **kwargs)
 
 
-def get_runtime_content_posts_service(*args, **kwargs):
-    from bias_core.extensions.runtime import get_runtime_content_posts_service as runtime_get_content_posts_service
-
-    return runtime_get_content_posts_service(*args, **kwargs)
+def increment_user_comment_count(*args, **kwargs):
+    return _service_method(get_runtime_service("users.service"), "increment_comment_count")(*args, **kwargs)
 
 
-def increment_runtime_user_comment_count(*args, **kwargs):
-    from bias_core.extensions.runtime import increment_runtime_user_comment_count as runtime_increment_user_comment_count
-
-    return runtime_increment_user_comment_count(*args, **kwargs)
+def clamp_discussion_read_states(*args, **kwargs):
+    return _service_method(get_runtime_service("content.discussions"), "clamp_read_states")(*args, **kwargs)
 
 
-def clamp_runtime_discussion_read_states(*args, **kwargs):
-    from bias_core.extensions.runtime import clamp_runtime_discussion_read_states as runtime_clamp_discussion_read_states
-
-    return runtime_clamp_discussion_read_states(*args, **kwargs)
-
-
-def mark_runtime_discussion_read(*args, **kwargs):
-    from bias_core.extensions.runtime import mark_runtime_discussion_read as runtime_mark_discussion_read
-
-    return runtime_mark_discussion_read(*args, **kwargs)
+def mark_discussion_read(*args, **kwargs):
+    return _service_method(get_runtime_service("content.discussions"), "mark_read")(*args, **kwargs)
 
 
 def refresh_runtime_model_private(*args, **kwargs):
@@ -71,10 +69,8 @@ def refresh_runtime_model_private(*args, **kwargs):
     return runtime_refresh_model_private(*args, **kwargs)
 
 
-def requires_runtime_content_approval(*args, **kwargs):
-    from bias_core.extensions.runtime import requires_runtime_content_approval as runtime_requires_content_approval
-
-    return runtime_requires_content_approval(*args, **kwargs)
+def requires_content_approval(*args, **kwargs):
+    return _service_method(get_runtime_service("users.service"), "requires_content_approval")(*args, **kwargs)
 
 
 def create_post(
@@ -89,10 +85,10 @@ def create_post(
     lock_discussion_for_post_number_cb,
     create_post_with_sequential_number_cb,
 ) -> Post:
-    ensure_runtime_user_not_suspended(user, "回复讨论")
-    ensure_runtime_user_email_confirmed(user, "回复讨论")
-    ensure_runtime_forum_permission(user, "discussion.reply", "没有权限回复讨论")
-    requires_approval = requires_runtime_content_approval(user, "replyWithoutApproval")
+    ensure_user_not_suspended(user, "回复讨论")
+    ensure_user_email_confirmed(user, "回复讨论")
+    ensure_forum_permission(user, "discussion.reply", "没有权限回复讨论")
+    requires_approval = requires_content_approval(user, "replyWithoutApproval")
 
     discussion = can_reply_in_discussion(discussion_id, user)
 
@@ -134,9 +130,9 @@ def create_post(
                 last_post_number=post.number,
             )
 
-            increment_runtime_user_comment_count(user.id, 1)
+            increment_user_comment_count(user.id, 1)
 
-            mark_runtime_discussion_read(
+            mark_discussion_read(
                 discussion_id=discussion.id,
                 user=user,
                 last_read_post_number=post.number,
@@ -246,7 +242,7 @@ def update_post(
     can_edit_post_cb,
     render_markdown_cb,
 ) -> Post:
-    ensure_runtime_user_not_suspended(user, "编辑帖子")
+    ensure_user_not_suspended(user, "编辑帖子")
     post = Post.objects.get(id=post_id)
 
     if not can_edit_post_cb(post, user):
@@ -318,7 +314,7 @@ def delete_post(
     user_counted_post_types,
     refresh_discussion_approved_stats_cb,
 ) -> bool:
-    ensure_runtime_user_not_suspended(user, "删除帖子")
+    ensure_user_not_suspended(user, "删除帖子")
     post = Post.objects.select_related("discussion").get(id=post_id)
 
     if not can_delete_post_cb(post, user):
@@ -359,12 +355,12 @@ def delete_post(
                 "last_post_id",
                 "last_post_number",
             ])
-            clamp_runtime_discussion_read_states(
+            clamp_discussion_read_states(
                 discussion_id=discussion.id,
                 last_post_number=discussion.last_post_number,
             )
             if post.user and post.type in user_counted_post_types:
-                increment_runtime_user_comment_count(post.user_id, -1)
+                increment_user_comment_count(post.user_id, -1)
 
         _apply_post_deleted_extensions(
             context={
@@ -429,13 +425,13 @@ def set_hidden_state(
                 "last_post_id",
                 "last_post_number",
             ])
-            clamp_runtime_discussion_read_states(
+            clamp_discussion_read_states(
                 discussion_id=post.discussion_id,
                 last_post_number=post.discussion.last_post_number,
             )
             if post.user and post.type in user_counted_post_types:
                 delta = -1 if is_hidden else 1
-                increment_runtime_user_comment_count(post.user_id, delta)
+                increment_user_comment_count(post.user_id, delta)
 
         _apply_post_hidden_extensions(
             post,
@@ -497,7 +493,7 @@ def _apply_post_deleted_extensions(*, context: dict) -> dict:
 
 
 def _content_posts_method(name: str):
-    service = get_runtime_content_posts_service(None)
+    service = get_runtime_service("content.posts", None)
     if isinstance(service, dict):
         method = service.get(name)
     else:

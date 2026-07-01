@@ -7,10 +7,10 @@ from bias_ext_posts.backend.content_models import get_post_model
 from bias_ext_posts.backend.models import Post
 
 
-def get_runtime_content_posts_service(*args, **kwargs):
-    from bias_core.extensions.runtime import get_runtime_content_posts_service as runtime_get_content_posts_service
+def get_runtime_service(service_key: str, default=None):
+    from bias_core.extensions.runtime import get_runtime_service as runtime_get_service
 
-    return runtime_get_content_posts_service(*args, **kwargs)
+    return runtime_get_service(service_key, default)
 
 
 @dataclass
@@ -218,7 +218,7 @@ def get_page_for_near_post(
 
 
 def _content_posts_method(name: str):
-    service = get_runtime_content_posts_service(None)
+    service = get_runtime_service("content.posts", None)
     if isinstance(service, dict):
         method = service.get(name)
     else:

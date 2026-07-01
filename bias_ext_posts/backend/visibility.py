@@ -18,22 +18,32 @@ def can_view_runtime_model_private(*args, **kwargs):
     return runtime_can_view_model_private(*args, **kwargs)
 
 
-def get_runtime_visible_discussion_ids(*args, **kwargs):
-    from bias_core.extensions.runtime import get_runtime_visible_discussion_ids as runtime_get_visible_discussion_ids
+def get_runtime_service(service_key: str, default=None):
+    from bias_core.extensions.runtime import get_runtime_service as runtime_get_service
 
-    return runtime_get_visible_discussion_ids(*args, **kwargs)
-
-
-def has_runtime_discussion_visibility(*args, **kwargs):
-    from bias_core.extensions.runtime import has_runtime_discussion_visibility as runtime_has_discussion_visibility
-
-    return runtime_has_discussion_visibility(*args, **kwargs)
+    return runtime_get_service(service_key, default)
 
 
-def has_runtime_forum_permission(*args, **kwargs):
-    from bias_core.extensions.runtime import has_runtime_forum_permission as runtime_has_forum_permission
+def _service_method(service, name: str):
+    if isinstance(service, dict):
+        method = service.get(name)
+    else:
+        method = getattr(service, name, None)
+    if not callable(method):
+        raise RuntimeError(f"Posts 扩展运行时服务缺少方法: {name}")
+    return method
 
-    return runtime_has_forum_permission(*args, **kwargs)
+
+def get_visible_discussion_ids(*args, **kwargs):
+    return _service_method(get_runtime_service("content.discussions"), "get_visible_ids")(*args, **kwargs)
+
+
+def has_discussion_visibility(*args, **kwargs):
+    return bool(_service_method(get_runtime_service("content.discussions"), "has_visibility")(*args, **kwargs))
+
+
+def has_forum_permission(user, permission_names) -> bool:
+    return bool(_service_method(get_runtime_service("users.service"), "has_forum_permission")(user, permission_names))
 
 
 def has_runtime_model_visibility(*args, **kwargs):
@@ -61,7 +71,7 @@ def scope_post_view(queryset, context: dict):
     if _is_staff_user(user):
         return queryset.filter(base_q)
 
-    visible_discussion_ids = get_runtime_visible_discussion_ids(
+    visible_discussion_ids = get_visible_discussion_ids(
         user=user,
         ability="view",
         context=context,
@@ -139,8 +149,8 @@ def _apply_post_hidden_visibility_branch(queryset, *, user=None):
     visible_queryset = queryset.filter(hidden_at__isnull=True)
     if user and getattr(user, "is_authenticated", False):
         visible_queryset = visible_queryset | queryset.filter(hidden_at__isnull=False, user=user)
-    if has_runtime_discussion_visibility(ability="hidePosts", exact=True):
-        visible_discussion_ids = get_runtime_visible_discussion_ids(
+    if has_discussion_visibility(ability="hidePosts", exact=True):
+        visible_discussion_ids = get_visible_discussion_ids(
             user=user,
             ability="hidePosts",
         )
@@ -156,4 +166,4 @@ def _is_staff_user(user) -> bool:
 
 
 def _has_forum_permission(user, permission_names) -> bool:
-    return has_runtime_forum_permission(user, permission_names)
+    return has_forum_permission(user, permission_names)

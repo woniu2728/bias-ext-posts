@@ -14,9 +14,9 @@ def _runtime_service_method(service: Any, name: str):
 
 
 def _content_posts_method(name: str):
-    from bias_core.extensions.runtime import get_runtime_content_posts_service
+    from bias_core.extensions.runtime import get_runtime_service
 
-    content_posts = get_runtime_content_posts_service(None)
+    content_posts = get_runtime_service("content.posts", None)
     if content_posts is None:
         return None
     method = content_posts.get(name) if isinstance(content_posts, dict) else getattr(content_posts, name, None)
@@ -87,10 +87,9 @@ post_service_provider.event_types = post_event_type_aliases
 
 
 def _list_approval_queue() -> list[dict]:
-    from bias_core.extensions.runtime import list_runtime_pending_discussion_first_post_ids
     from bias_ext_posts.backend.models import Post
 
-    discussion_first_post_ids = list_runtime_pending_discussion_first_post_ids()
+    discussion_first_post_ids = _pending_discussion_first_post_ids()
     posts = Post.objects.filter(
         approval_status=Post.APPROVAL_PENDING,
     ).exclude(
@@ -100,10 +99,9 @@ def _list_approval_queue() -> list[dict]:
 
 
 def _count_pending_approvals() -> int:
-    from bias_core.extensions.runtime import list_runtime_pending_discussion_first_post_ids
     from bias_ext_posts.backend.models import Post
 
-    discussion_first_post_ids = list_runtime_pending_discussion_first_post_ids()
+    discussion_first_post_ids = _pending_discussion_first_post_ids()
     return Post.objects.filter(approval_status=Post.APPROVAL_PENDING).exclude(
         id__in=discussion_first_post_ids,
     ).count()
@@ -158,6 +156,13 @@ def _serialize_user(user) -> dict | None:
         "username": user.username,
         "display_name": user.display_name,
     }
+
+
+def _pending_discussion_first_post_ids() -> list[int]:
+    from bias_core.extensions.runtime import get_runtime_service
+
+    method = _runtime_service_method(get_runtime_service("content.discussions"), "pending_first_post_ids")
+    return [int(item) for item in (method() or []) if item is not None]
 
 
 def _get_visible_post_ids(user=None, *, context: dict | None = None):
@@ -545,9 +550,9 @@ def _delete_discussion_posts(discussion) -> tuple[dict, ...]:
 
 
 def _serialize_post(post, user=None, **kwargs):
-    from bias_core.extensions.runtime import get_runtime_content_posts_service
+    from bias_core.extensions.runtime import get_runtime_service
 
-    content_posts = get_runtime_content_posts_service(None)
+    content_posts = get_runtime_service("content.posts", None)
     if content_posts is not None:
         method = content_posts.get("serialize") if isinstance(content_posts, dict) else getattr(content_posts, "serialize", None)
         if callable(method):
@@ -558,9 +563,9 @@ def _serialize_post(post, user=None, **kwargs):
 
 
 def _serialize_post_by_id(post_id: int, user=None, **kwargs):
-    from bias_core.extensions.runtime import get_runtime_content_posts_service
+    from bias_core.extensions.runtime import get_runtime_service
 
-    content_posts = get_runtime_content_posts_service(None)
+    content_posts = get_runtime_service("content.posts", None)
     if content_posts is not None:
         method = content_posts.get("serialize_by_id") if isinstance(content_posts, dict) else getattr(
             content_posts,

@@ -17,16 +17,28 @@ def get_runtime_post_lifecycle_service(*args, **kwargs):
     return runtime_get_post_lifecycle_service(*args, **kwargs)
 
 
-def increment_runtime_user_comment_count(*args, **kwargs):
-    from bias_core.extensions.runtime import increment_runtime_user_comment_count as runtime_increment_user_comment_count
+def get_runtime_service(service_key: str, default=None):
+    from bias_core.extensions.runtime import get_runtime_service as runtime_get_service
 
-    return runtime_increment_user_comment_count(*args, **kwargs)
+    return runtime_get_service(service_key, default)
 
 
-def mark_runtime_discussion_read(*args, **kwargs):
-    from bias_core.extensions.runtime import mark_runtime_discussion_read as runtime_mark_discussion_read
+def _service_method(service, name: str):
+    if isinstance(service, dict):
+        method = service.get(name)
+    else:
+        method = getattr(service, name, None)
+    if not callable(method):
+        raise RuntimeError(f"Posts 扩展运行时服务缺少方法: {name}")
+    return method
 
-    return runtime_mark_discussion_read(*args, **kwargs)
+
+def increment_user_comment_count(*args, **kwargs):
+    return _service_method(get_runtime_service("users.service"), "increment_comment_count")(*args, **kwargs)
+
+
+def mark_discussion_read(*args, **kwargs):
+    return _service_method(get_runtime_service("content.discussions"), "mark_read")(*args, **kwargs)
 
 
 def refresh_runtime_model_private(*args, **kwargs):
@@ -77,8 +89,8 @@ def approve_post(
             ])
 
             if post.user and post.type in user_counted_post_types:
-                increment_runtime_user_comment_count(post.user_id, 1)
-                mark_runtime_discussion_read(
+                increment_user_comment_count(post.user_id, 1)
+                mark_discussion_read(
                     discussion_id=discussion.id,
                     user=post.user,
                     last_read_post_number=post.number,
@@ -159,7 +171,7 @@ def reject_post(
                 "last_post_number",
             ])
             if post.user and post.type in user_counted_post_types:
-                increment_runtime_user_comment_count(post.user_id, -1)
+                increment_user_comment_count(post.user_id, -1)
 
         _apply_post_rejected_extensions(
             post,

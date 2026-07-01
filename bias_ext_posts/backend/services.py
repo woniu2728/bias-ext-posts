@@ -15,34 +15,40 @@ from bias_ext_posts.backend import post_query_service, service_lifecycle, servic
 from bias_ext_posts.backend.models import Post
 
 
-def get_runtime_content_posts_service(*args, **kwargs):
-    from bias_core.extensions.runtime import get_runtime_content_posts_service as runtime_get_content_posts_service
+def get_runtime_service(service_key: str, default=None):
+    from bias_core.extensions.runtime import get_runtime_service as runtime_get_service
 
-    return runtime_get_content_posts_service(*args, **kwargs)
-
-
-def lock_runtime_discussion_for_post_number(*args, **kwargs):
-    from bias_core.extensions.runtime import lock_runtime_discussion_for_post_number as runtime_lock_discussion_for_post_number
-
-    return runtime_lock_discussion_for_post_number(*args, **kwargs)
+    return runtime_get_service(service_key, default)
 
 
-def refresh_runtime_discussion_approved_stats(*args, **kwargs):
-    from bias_core.extensions.runtime import refresh_runtime_discussion_approved_stats as runtime_refresh_discussion_approved_stats
-
-    return runtime_refresh_discussion_approved_stats(*args, **kwargs)
-
-
-def validate_runtime_replyable_discussion(*args, **kwargs):
-    from bias_core.extensions.runtime import validate_runtime_replyable_discussion as runtime_validate_replyable_discussion
-
-    return runtime_validate_replyable_discussion(*args, **kwargs)
+def _service_method(service, name: str):
+    if isinstance(service, dict):
+        method = service.get(name)
+    else:
+        method = getattr(service, name, None)
+    if not callable(method):
+        raise RuntimeError(f"Posts 扩展运行时服务缺少方法: {name}")
+    return method
 
 
-def has_runtime_forum_permission(*args, **kwargs):
-    from bias_core.extensions.runtime import has_runtime_forum_permission as runtime_has_forum_permission
+def get_content_posts_service(default=None):
+    return get_runtime_service("content.posts", default)
 
-    return runtime_has_forum_permission(*args, **kwargs)
+
+def lock_discussion_for_post_number(*args, **kwargs):
+    return _service_method(get_runtime_service("content.discussions"), "lock_for_post_number")(*args, **kwargs)
+
+
+def refresh_discussion_approved_stats(*args, **kwargs):
+    return _service_method(get_runtime_service("content.discussions"), "refresh_approved_stats")(*args, **kwargs)
+
+
+def validate_replyable_discussion(*args, **kwargs):
+    return _service_method(get_runtime_service("content.discussions"), "validate_replyable")(*args, **kwargs)
+
+
+def has_forum_permission(user, permission_names) -> bool:
+    return bool(_service_method(get_runtime_service("users.service"), "has_forum_permission")(user, permission_names))
 
 
 def _get_forum_registry():
@@ -103,7 +109,7 @@ class PostService:
         Raises:
             ValueError: 讨论不存在或已锁定
         """
-        content_posts = get_runtime_content_posts_service(None)
+        content_posts = get_content_posts_service(None)
         if content_posts is not None:
             create = content_posts.get("create") if isinstance(content_posts, dict) else getattr(content_posts, "create", None)
             if callable(create):
@@ -255,7 +261,7 @@ class PostService:
         Raises:
             PermissionDenied: 权限不足
         """
-        content_posts = get_runtime_content_posts_service(None)
+        content_posts = get_content_posts_service(None)
         if content_posts is not None:
             update = content_posts.get("update") if isinstance(content_posts, dict) else getattr(content_posts, "update", None)
             if callable(update):
@@ -289,7 +295,7 @@ class PostService:
         Raises:
             PermissionDenied: 权限不足
         """
-        content_posts = get_runtime_content_posts_service(None)
+        content_posts = get_content_posts_service(None)
         if content_posts is not None:
             delete = content_posts.get("delete") if isinstance(content_posts, dict) else getattr(content_posts, "delete", None)
             if callable(delete):
@@ -311,7 +317,7 @@ class PostService:
 
     @staticmethod
     def set_hidden_state(post: Post, admin_user: Any, is_hidden: bool) -> Post:
-        content_posts = get_runtime_content_posts_service(None)
+        content_posts = get_content_posts_service(None)
         if content_posts is not None:
             set_hidden = content_posts.get("set_hidden_state") if isinstance(content_posts, dict) else getattr(content_posts, "set_hidden_state", None)
             if callable(set_hidden):
@@ -341,7 +347,7 @@ class PostService:
         *,
         discussion=None,
     ):
-        return validate_runtime_replyable_discussion(
+        return validate_replyable_discussion(
             discussion_id,
             user,
             discussion=discussion,
@@ -349,7 +355,7 @@ class PostService:
 
     @staticmethod
     def _lock_discussion_for_post_number(discussion_id: int):
-        return lock_runtime_discussion_for_post_number(discussion_id)
+        return lock_discussion_for_post_number(discussion_id)
 
     @staticmethod
     def _allocate_next_post_number(discussion) -> int:
@@ -375,14 +381,14 @@ class PostService:
 
     @staticmethod
     def _refresh_discussion_approved_stats(discussion):
-        return refresh_runtime_discussion_approved_stats(
+        return refresh_discussion_approved_stats(
             discussion,
             discussion_counted_post_types=_get_discussion_counted_post_types(),
         )
 
     @staticmethod
     def approve_post(post: Post, admin_user: Any, note: str = "") -> Post:
-        content_posts = get_runtime_content_posts_service(None)
+        content_posts = get_content_posts_service(None)
         if content_posts is not None:
             approve = content_posts.get("approve") if isinstance(content_posts, dict) else getattr(content_posts, "approve", None)
             if callable(approve):
@@ -405,7 +411,7 @@ class PostService:
 
     @staticmethod
     def reject_post(post: Post, admin_user: Any, note: str = "") -> Post:
-        content_posts = get_runtime_content_posts_service(None)
+        content_posts = get_content_posts_service(None)
         if content_posts is not None:
             reject = content_posts.get("reject") if isinstance(content_posts, dict) else getattr(content_posts, "reject", None)
             if callable(reject):
@@ -435,15 +441,15 @@ class PostService:
             return False
         allowed = False
         if (
-            has_runtime_forum_permission(user, "post.edit")
-            or has_runtime_forum_permission(user, "discussion.edit")
+            has_forum_permission(user, "post.edit")
+            or has_forum_permission(user, "discussion.edit")
         ):
             allowed = True
         elif post.user_id == user.id:
             allowed = (
                 post.approval_status == Post.APPROVAL_REJECTED
-                or has_runtime_forum_permission(user, "post.editOwn")
-                or has_runtime_forum_permission(user, "discussion.editOwn")
+                or has_forum_permission(user, "post.editOwn")
+                or has_forum_permission(user, "discussion.editOwn")
             )
         return bool(evaluate_extension_policy(
             "post.edit",
@@ -461,14 +467,14 @@ class PostService:
             return False
         allowed = False
         if (
-            has_runtime_forum_permission(user, "post.delete")
-            or has_runtime_forum_permission(user, "discussion.delete")
+            has_forum_permission(user, "post.delete")
+            or has_forum_permission(user, "discussion.delete")
         ):
             allowed = True
         elif post.user_id == user.id:
             allowed = (
-                has_runtime_forum_permission(user, "post.deleteOwn")
-                or has_runtime_forum_permission(user, "discussion.deleteOwn")
+                has_forum_permission(user, "post.deleteOwn")
+                or has_forum_permission(user, "discussion.deleteOwn")
             )
         return bool(evaluate_extension_policy(
             "post.delete",
@@ -485,9 +491,9 @@ class PostService:
             return False
         allowed = False
         if (
-            has_runtime_forum_permission(user, "post.hide")
-            or has_runtime_forum_permission(user, "discussion.hidePosts")
-            or has_runtime_forum_permission(user, "discussion.hide")
+            has_forum_permission(user, "post.hide")
+            or has_forum_permission(user, "discussion.hidePosts")
+            or has_forum_permission(user, "discussion.hide")
         ):
             allowed = True
         elif post.user_id == user.id:
@@ -505,7 +511,7 @@ class PostService:
             return False
         if getattr(post, "type", "") != "comment":
             return False
-        allowed = has_runtime_forum_permission(user, "discussion.viewIpsPosts")
+        allowed = has_forum_permission(user, "discussion.viewIpsPosts")
         return bool(evaluate_extension_policy(
             "post.view_ip",
             default=allowed,
@@ -521,7 +527,7 @@ class PostService:
         discussion = getattr(post, "discussion", None)
         if discussion is None:
             return False
-        if not validate_runtime_replyable_discussion(
+        if not validate_replyable_discussion(
             post.discussion_id,
             user,
             discussion=discussion,
